@@ -14,10 +14,8 @@ dist/
 # Viewer runtime state (session registry, aliases, layout)
 .state/
 
-# Local working notes for Claude Code. Deliberately not committed: durable
-# facts belong in docs/, which is. See CLAUDE.md itself for the convention.
-CLAUDE.md
-
-# Working plan drafts. Local and disposable, like CLAUDE.md above: a plan
-# that is settled and worth keeping belongs in an ADR (docs/adr/) instead.
+# Working plan drafts. Local and disposable: a plan that is settled and
+# worth keeping belongs in an ADR (docs/adr/) instead.
 docs/plan/
+
+# CLAUDE.md is a tracked symlink to AGENTS.md (see both), not ignored.
