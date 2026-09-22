@@ -3,7 +3,44 @@
 import { pathToFileURL } from "node:url";
 import { check, report, src, stubBrowser } from "./harness.mjs";
 
-stubBrowser();
+// A smart-enough fetch stub for reconnectMember (POST /api/sessions) and
+// addLink (POST /api/links), so the reconnect-and-relink scenarios below can
+// run without a real server. Everything else falls back to `{}`.
+let nextSpawnId = 0;
+const spawned = [];
+const linksPosted = [];
+stubBrowser({
+  fetch: async (url, opts = {}) => {
+    const method = opts.method ?? "GET";
+    if (url === "/api/sessions" && method === "POST") {
+      const body = JSON.parse(opts.body);
+      const sessionId = `spawn-${nextSpawnId++}`;
+      spawned.push({ sessionId, ...body });
+      return {
+        ok: true,
+        json: async () => ({
+          session: {
+            sessionId,
+            host: body.host,
+            kind: "shell",
+            cwd: body.cwd,
+            shell: "sh",
+            cols: body.cols ?? 80,
+            rows: body.rows ?? 45,
+            startedAt: 1,
+            ...(body.alias ? { alias: body.alias } : {}),
+          },
+        }),
+      };
+    }
+    if (url === "/api/links" && method === "POST") {
+      const body = JSON.parse(opts.body);
+      linksPosted.push(body);
+      return { ok: true, json: async () => ({ links: [] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  },
+});
 
 // Each scenario wants a store with nothing in it. The query string makes node
 // treat it as a new module, so every `fresh()` is a newly initialised store.
@@ -124,5 +161,104 @@ S().addSession(info(L1, "local", "/tmp/one"));
 S().setPosition("foreign:local:abc", { x: 1, y: 1 });
 check("external cards' positions are not saved", !JSON.stringify(S().serializeViews()).includes("foreign:"));
 check("saving with no views yet still yields a valid document", (() => { const d = S().serializeViews(); return d.version === 1 && d.tabs.length === 1; })());
+
+// ---- ALIAS + CLAUDE SESSION ID: saved once, at the top level, keyed like positions
+store = await fresh();
+const C1 = U("g");
+S().addSession(info(C1, "local", "/tmp/claude-one"));
+await S().setAlias(C1, "my claude");
+S().applyStatus({ sessions: [{ sessionId: C1, cwd: "/tmp/claude-one", activity: "idle", claudeSessionId: "claude-c1" }] });
+const docC = JSON.parse(JSON.stringify(S().serializeViews()));
+check(
+  "alias and claude session id are saved in meta, keyed like positions",
+  docC.meta?.[C1]?.alias === "my claude" &&
+    docC.meta[C1].claudeSessionId === "claude-c1" &&
+    docC.meta[C1].host === "local" &&
+    docC.meta[C1].cwd === "/tmp/claude-one",
+  JSON.stringify(docC.meta),
+);
+
+// ---- RECONNECT: a local terminal that never comes back, but ran Claude, is
+// kept aside (unlike a plain shell, which is still dropped for good) and can
+// be brought back on request via --resume.
+store = await fresh();
+S().hydrateViews(docC);
+check(
+  "a dead local session with a claude id is kept aside, not dropped",
+  S().retained.meta[C1]?.claudeSessionId === "claude-c1",
+  JSON.stringify(S().retained),
+);
+check("...its position is kept aside too", S().retained.positions[C1] !== undefined);
+check("...and it is offered by the same key everywhere else was", S().retained.meta[C1]?.host === "local" && S().retained.meta[C1]?.cwd === "/tmp/claude-one");
+
+await S().reconnectMember(C1);
+const reconnectedC1 = spawned.at(-1);
+check("reconnect: spawn was asked to resume the saved claude session", reconnectedC1.resume === "claude-c1" && reconnectedC1.alias === "my claude");
+check("reconnect: the new terminal is live", S().sessions[reconnectedC1.sessionId] !== undefined);
+check(
+  "reconnect: it takes over the old key's saved position",
+  S().positions[reconnectedC1.sessionId]?.x === docC.positions[C1].x && S().positions[reconnectedC1.sessionId]?.y === docC.positions[C1].y,
+);
+check("reconnect: nothing is left waiting for the old key", S().retained.meta[C1] === undefined && S().retained.positions[C1] === undefined);
+
+// ---- RECONNECT inside a subset view: the new session rejoins the same view,
+// at the position that view had saved for it, not the overview's.
+store = await fresh();
+const C2 = U("h");
+S().addSession(info(C2, "local", "/tmp/claude-two"));
+S().addTab("claude-work");
+const claudeWork = S().activeTab;
+S().addToView([C2]);
+S().setPosition(C2, { x: 77, y: 88 }); // active tab is claudeWork, so this is per-view
+S().applyStatus({ sessions: [{ sessionId: C2, cwd: "/tmp/claude-two", activity: "idle", claudeSessionId: "claude-c2" }] });
+const docD = JSON.parse(JSON.stringify(S().serializeViews()));
+
+store = await fresh();
+S().hydrateViews(docD);
+check(
+  "subset: a dead claude session is kept aside for the view it was in",
+  S().retained.tabs[claudeWork]?.members.includes(C2),
+  JSON.stringify(S().retained.tabs),
+);
+check("subset: ...at the position that view had for it", S().retained.tabs[claudeWork]?.positions[C2]?.x === 77);
+
+await S().reconnectMember(C2);
+const reconnectedC2 = spawned.at(-1);
+const claudeWorkTab = S().tabs.find((x) => x.id === claudeWork);
+check("subset: reconnect adds the new session into the same view", claudeWorkTab.members.includes(reconnectedC2.sessionId));
+check("subset: ...at its saved position", claudeWorkTab.positions[reconnectedC2.sessionId]?.x === 77);
+check("subset: nothing is left waiting for that view", !S().retained.tabs[claudeWork]);
+
+// ---- LINKS follow the same durable key, so one survives a resume even
+// though the link itself is keyed by session id everywhere else.
+store = await fresh();
+const A = U("i"), B = U("j");
+S().addSession(info(A, "local", "/tmp/a-claude"));
+S().addSession(info(B, "local", "/tmp/b-claude"));
+S().applyStatus({
+  sessions: [
+    { sessionId: A, cwd: "/tmp/a-claude", activity: "idle", claudeSessionId: "claude-a" },
+    { sessionId: B, cwd: "/tmp/b-claude", activity: "idle", claudeSessionId: "claude-b" },
+  ],
+});
+S().setLinks([{ id: `${A}->${B}`, source: A, target: B }]);
+const docE = JSON.parse(JSON.stringify(S().serializeViews()));
+check("links are saved by durable key", docE.links?.some((l) => l.source === A && l.target === B), JSON.stringify(docE.links));
+
+// A's terminal is gone; B kept running and comes back under its own id (a
+// page reload, not a restart, so a plain local id like B's still resolves).
+store = await fresh();
+S().addSession(info(B, "local", "/tmp/b-claude"));
+S().hydrateViews(docE);
+check(
+  "link: with one end still missing, the link waits rather than being dropped",
+  S().links.length === 0 && S().retained.links.some((l) => l.source === A || l.target === A),
+  JSON.stringify(S().retained.links),
+);
+
+linksPosted.length = 0;
+await S().reconnectMember(A);
+check("link: reconnecting the missing end recreates the link against both current ids", linksPosted.some((l) => l.target === B), JSON.stringify(linksPosted));
+check("link: nothing is left pending once both ends are back", S().retained.links.length === 0);
 
 report();

@@ -270,6 +270,12 @@ export interface TabsSlice {
   serializeViews: () => PersistedViews;
   /** Bring back saved entries whose sessions have since appeared. */
   resolveRetained: () => void;
+  /**
+   * Resume a retained member that never came back on its own: spawns
+   * `claude --resume` for its saved Claude session id and folds the new
+   * session into wherever the old key was kept aside.
+   */
+  reconnectMember: (key: string) => Promise<void>;
   /** A new view is an empty subset: the owner picks which sessions it shows. */
   addTab: (name?: string) => void;
   /** Show more sessions on the active view. No effect on the overview. */

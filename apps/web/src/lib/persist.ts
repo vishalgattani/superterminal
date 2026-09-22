@@ -1,5 +1,5 @@
-import type { SessionInfo } from "@cv/shared";
-import type { GraphTab, NodeGroup, NodePosition } from "../store/model.ts";
+import type { HostId, SessionInfo } from "@cv/shared";
+import type { GraphTab, NodeGroup, NodePosition, SessionActivity } from "../store/model.ts";
 
 /**
  * Saved views, and how they survive a reload and a restart.
@@ -25,6 +25,21 @@ export interface PersistedTab {
   groups?: { id: string; name: string; hue: number; members: string[] }[];
 }
 
+/**
+ * What a saved member was called and how to bring it back. Kept once per
+ * durable key at the top level (like `positions`) rather than per tab: a
+ * session's alias and Claude conversation id are facts about the session, not
+ * about which view happens to show it, so there is nothing to duplicate.
+ */
+export interface PersistedMember {
+  alias?: string;
+  /** Claude's own session id, the one `--resume` takes. */
+  claudeSessionId?: string;
+  /** Needed to spawn the reconnect: which host and folder to resume into. */
+  host?: HostId;
+  cwd?: string;
+}
+
 export interface PersistedViews {
   version: 1;
   activeTab: string;
@@ -33,15 +48,21 @@ export interface PersistedViews {
   treeFlow: "LR" | "TD";
   positions: Record<string, NodePosition>;
   tabs: PersistedTab[];
+  /** Per saved member, keyed the same way as `positions` and `members`. */
+  meta?: Record<string, PersistedMember>;
+  /** Context links, saved by the same durable key so a resume can restore them. */
+  links?: { source: string; target: string }[];
 }
 
 /** Saved keys with no live session yet, kept so they are not lost on the next save. */
 export interface Retained {
   tabs: Record<string, { members: string[]; positions: Record<string, NodePosition> }>;
   positions: Record<string, NodePosition>;
+  meta: Record<string, PersistedMember>;
+  links: { source: string; target: string }[];
 }
 
-export const emptyRetained = (): Retained => ({ tabs: {}, positions: {} });
+export const emptyRetained = (): Retained => ({ tabs: {}, positions: {}, meta: {}, links: [] });
 
 const OVERVIEW = "default";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -52,11 +73,25 @@ export const sessionKey = (info: Pick<SessionInfo, "sessionId" | "tmuxSession">)
 /** A key that could belong to a session that is not here yet. */
 const isDurable = (key: string) => !UUID.test(key);
 
+/**
+ * A key worth keeping aside even though it is not durable on its own: a local
+ * terminal's id dies with the process, but if it was running Claude the
+ * conversation itself survives and can be resumed, so its key is kept until
+ * the owner clicks "reconnect" rather than dropped like an ordinary dead id.
+ */
+const canRetain = (key: string, meta: Record<string, PersistedMember>) =>
+  isDurable(key) || Boolean(meta[key]?.claudeSessionId);
+
 /** Ids that are already stable strings and pass through unchanged. */
 const isPassThrough = (id: string) => id.startsWith("folder:");
 
-/** Cards for sessions the viewer did not start come and go; their spots are not saved. */
-const isTransient = (id: string) => id.startsWith("foreign:");
+/**
+ * Cards for sessions the viewer did not start come and go, and so do
+ * reconnect cards (their canvas id is a `reconnect:` wrapper around the real
+ * key, which is what actually gets saved, via `retained`) — neither has a
+ * position of its own worth saving under its synthetic id.
+ */
+const isTransient = (id: string) => id.startsWith("foreign:") || id.startsWith("reconnect:");
 
 export function serializeViews(input: {
   tabs: GraphTab[];
@@ -66,9 +101,11 @@ export function serializeViews(input: {
   showForeign: boolean;
   treeFlow: "LR" | "TD";
   sessions: Record<string, SessionInfo>;
+  activity: Record<string, SessionActivity>;
+  links: { source: string; target: string }[];
   retained: Retained;
 }): PersistedViews {
-  const { sessions, retained } = input;
+  const { sessions, activity, retained } = input;
   const key = (id: string): string | undefined =>
     sessions[id] ? sessionKey(sessions[id]!) : isPassThrough(id) ? id : undefined;
 
@@ -84,6 +121,37 @@ export function serializeViews(input: {
     }
     return out;
   };
+
+  // Alias and Claude session id, captured from the live session at save time.
+  // Kept aside (retained.meta) for a key that is not resolvable right now, and
+  // skipped for a session with neither an alias nor a Claude id: there is
+  // nothing about it worth remembering across a reload.
+  const meta: Record<string, PersistedMember> = { ...retained.meta };
+  for (const info of Object.values(sessions)) {
+    const claudeSessionId = activity[info.sessionId]?.claudeSessionId;
+    if (!info.alias && !claudeSessionId) continue;
+    meta[sessionKey(info)] = {
+      ...(info.alias ? { alias: info.alias } : {}),
+      ...(claudeSessionId ? { claudeSessionId } : {}),
+      host: info.host,
+      cwd: info.cwd,
+    };
+  }
+
+  // Links, by the same durable key as everything else, so a resumed session
+  // (a new id for the same conversation) can have them re-created once it
+  // reappears — see resolveRetained.
+  const links = [...retained.links];
+  const seenLinks = new Set(links.map((l) => `${l.source}->${l.target}`));
+  for (const l of input.links) {
+    const source = key(l.source);
+    const target = key(l.target);
+    if (!source || !target) continue;
+    const id = `${source}->${target}`;
+    if (seenLinks.has(id)) continue;
+    seenLinks.add(id);
+    links.push({ source, target });
+  }
 
   return {
     version: 1,
@@ -118,6 +186,8 @@ export function serializeViews(input: {
         ...(groups && groups.length ? { groups } : {}),
       };
     }),
+    ...(Object.keys(meta).length ? { meta } : {}),
+    ...(links.length ? { links } : {}),
   };
 }
 
@@ -129,6 +199,8 @@ export interface Hydrated {
   showForeign: boolean;
   treeFlow: "LR" | "TD";
   retained: Retained;
+  /** Links whose endpoints both already resolve; the caller re-creates them. */
+  links: { source: string; target: string }[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -145,6 +217,19 @@ export function hydrateViews(
   for (const info of Object.values(sessions)) byKey.set(sessionKey(info), info.sessionId);
   const retained = emptyRetained();
 
+  const meta: Record<string, PersistedMember> = {};
+  if (isObj((doc as { meta?: unknown }).meta)) {
+    for (const [k, v] of Object.entries((doc as { meta: Record<string, unknown> }).meta)) {
+      if (!isObj(v)) continue;
+      meta[k] = {
+        ...(typeof v.alias === "string" ? { alias: v.alias } : {}),
+        ...(typeof v.claudeSessionId === "string" ? { claudeSessionId: v.claudeSessionId } : {}),
+        ...(typeof v.host === "string" ? { host: v.host } : {}),
+        ...(typeof v.cwd === "string" ? { cwd: v.cwd } : {}),
+      };
+    }
+  }
+
   const id = (k: string): string | undefined =>
     byKey.get(k) ?? (isPassThrough(k) ? k : undefined);
 
@@ -159,7 +244,7 @@ export function hydrateViews(
       const p = { x: v.x, y: v.y };
       const resolved = id(k);
       if (resolved) out[resolved] = p;
-      else if (park && isDurable(k) && !isTransient(k)) park[k] = p;
+      else if (park && canRetain(k, meta) && !isTransient(k)) park[k] = p;
     }
     return out;
   };
@@ -177,7 +262,7 @@ export function hydrateViews(
         if (typeof k !== "string") continue;
         const resolved = id(k);
         if (resolved) members.push(resolved);
-        else if (isDurable(k)) park.members.push(k);
+        else if (canRetain(k, meta)) park.members.push(k);
       }
     }
     const groups: NodeGroup[] = [];
@@ -217,37 +302,75 @@ export function hydrateViews(
       ? doc.activeTab
       : OVERVIEW;
 
+  const positions = positionsOf(doc.positions, retained.positions);
+
+  // Keep meta only for keys actually parked somewhere above; a key that
+  // resolved needs nothing carried aside for it.
+  const parkedKeys = new Set([
+    ...Object.keys(retained.positions),
+    ...Object.values(retained.tabs).flatMap((t) => t.members),
+  ]);
+  for (const k of parkedKeys) if (meta[k]) retained.meta[k] = meta[k];
+
+  // Links, resolved where both ends already exist, kept aside where either
+  // (or both) are still waiting on a reconnect or a late re-adoption.
+  const hydratedLinks: { source: string; target: string }[] = [];
+  if (Array.isArray((doc as { links?: unknown }).links)) {
+    for (const raw of (doc as { links: unknown[] }).links) {
+      if (!isObj(raw) || typeof raw.source !== "string" || typeof raw.target !== "string") continue;
+      const source = id(raw.source);
+      const target = id(raw.target);
+      if (source && target) hydratedLinks.push({ source, target });
+      else if (canRetain(raw.source, meta) && canRetain(raw.target, meta)) {
+        retained.links.push({ source: raw.source, target: raw.target });
+      }
+    }
+  }
+
   return {
     tabs,
     activeTab,
-    positions: positionsOf(doc.positions, retained.positions),
+    positions,
     showFolders: doc.showFolders === true,
     showForeign: doc.showForeign !== false,
     treeFlow: doc.treeFlow === "LR" ? "LR" : "TD",
     retained,
+    links: hydratedLinks,
   };
 }
 
 /**
  * Bring retained keys back when their session shows up (fire came up after the
- * viewer did, or a tmux session was re-adopted later). Returns null when there
- * is nothing to do, so the common case costs one lookup.
+ * viewer did, a tmux session was re-adopted later, or a "reconnect" click
+ * resumed a Claude session under a new id — the caller passes a one-entry
+ * `sessions` map whose synthetic `tmuxSession` is the old key, so the same
+ * matching logic folds an explicit reconnect and a passive re-adoption into
+ * one code path). Returns null when there is nothing to do, so the common
+ * case costs one lookup.
  */
 export function resolveRetained(
   retained: Retained,
   tabs: GraphTab[],
   positions: Record<string, NodePosition>,
   sessions: Record<string, SessionInfo>,
-): { retained: Retained; tabs: GraphTab[]; positions: Record<string, NodePosition> } | null {
+): {
+  retained: Retained;
+  tabs: GraphTab[];
+  positions: Record<string, NodePosition>;
+  /** Links whose two ends just both became resolvable; re-create these. */
+  linksToAdd: { source: string; target: string }[];
+} | null {
   const hasAny =
-    Object.keys(retained.positions).length > 0 || Object.keys(retained.tabs).length > 0;
+    Object.keys(retained.positions).length > 0 ||
+    Object.keys(retained.tabs).length > 0 ||
+    retained.links.length > 0;
   if (!hasAny) return null;
 
   const byKey = new Map<string, string>();
   for (const info of Object.values(sessions)) byKey.set(sessionKey(info), info.sessionId);
 
   let changed = false;
-  const nextRetained: Retained = { tabs: {}, positions: {} };
+  const nextRetained: Retained = { tabs: {}, positions: {}, meta: {}, links: [] };
   const nextPositions = { ...positions };
   for (const [k, p] of Object.entries(retained.positions)) {
     const sid = byKey.get(k);
@@ -282,6 +405,22 @@ export function resolveRetained(
   });
   // Retained entries for a view that no longer exists are dropped.
 
+  // Meta for a key that just resolved is no longer needed: the live session
+  // carries its own alias and the next status poll picks up its Claude id.
+  for (const [k, m] of Object.entries(retained.meta)) {
+    if (!byKey.has(k)) nextRetained.meta[k] = m;
+  }
+
+  const linksToAdd: { source: string; target: string }[] = [];
+  for (const l of retained.links) {
+    const source = byKey.get(l.source);
+    const target = byKey.get(l.target);
+    if (source && target) {
+      linksToAdd.push({ source, target });
+      changed = true;
+    } else nextRetained.links.push(l);
+  }
+
   if (!changed) return null;
-  return { retained: nextRetained, tabs: nextTabs, positions: nextPositions };
+  return { retained: nextRetained, tabs: nextTabs, positions: nextPositions, linksToAdd };
 }

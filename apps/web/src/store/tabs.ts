@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { SessionInfo } from "@cv/shared";
 import { layoutGraph } from "../lib/layout.ts";
 import { buildFolderTree } from "../lib/folders.ts";
 import { emptyRetained, hydrateViews, resolveRetained, serializeViews } from "../lib/persist.ts";
@@ -28,6 +29,7 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
       const h = hydrateViews(doc, s.sessions);
       // Nothing saved, or unreadable: keep the defaults, and start saving.
       if (!h) return { viewsHydrated: true };
+      for (const l of h.links) void get().addLink(l.source, l.target);
       return {
         viewsHydrated: true,
         tabs: h.tabs,
@@ -51,6 +53,8 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
       showForeign: s.showForeign,
       treeFlow: s.treeFlow,
       sessions: s.sessions,
+      activity: s.activity,
+      links: s.links,
       retained: s.retained,
     });
   },
@@ -58,7 +62,48 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
   resolveRetained: () => {
     const s = get();
     const r = resolveRetained(s.retained, s.tabs, s.positions, s.sessions);
-    if (r) set({ retained: r.retained, tabs: r.tabs, positions: r.positions });
+    if (!r) return;
+    set({ retained: r.retained, tabs: r.tabs, positions: r.positions });
+    for (const l of r.linksToAdd) void get().addLink(l.source, l.target);
+  },
+
+  reconnectMember: async (key) => {
+    const s = get();
+    const meta = s.retained.meta[key];
+    if (!meta?.claudeSessionId) return;
+    const res = await fetch("/api/sessions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${s.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        host: meta.host ?? "local",
+        cwd: meta.cwd,
+        resume: meta.claudeSessionId,
+        alias: meta.alias,
+        cols: 100,
+        rows: 30,
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!body.session) return;
+    get().addSession(body.session);
+    // Fold the retained key into the freshly spawned session id everywhere it
+    // was parked — the same code path an automatic tmux re-adoption uses, fed
+    // every currently live session (so a link to one that was never gone
+    // resolves in the same pass) plus a synthetic entry whose "tmux name" is
+    // the old key, standing in for the one that just reconnected.
+    const after = get();
+    const fake = { sessionId: body.session.sessionId, tmuxSession: key } as SessionInfo;
+    const r = resolveRetained(after.retained, after.tabs, after.positions, {
+      ...after.sessions,
+      [body.session.sessionId]: fake,
+    });
+    if (r) {
+      set({ retained: r.retained, tabs: r.tabs, positions: r.positions });
+      for (const l of r.linksToAdd) void get().addLink(l.source, l.target);
+    }
   },
 
   addTab: (name) =>
