@@ -1,0 +1,24 @@
+{
+  // Shared compiler settings. Nothing is ever emitted from these: the server
+  // runs .ts through Node's type stripping and the web app is bundled by Vite,
+  // so tsc's only job here is to check.
+  //
+  // erasableSyntaxOnly matters more than it looks. Node strips types without
+  // understanding them, so syntax that needs real compilation (enums,
+  // constructor parameter properties, namespaces) would parse and then fail at
+  // runtime. This makes tsc reject it instead.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}

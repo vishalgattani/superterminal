@@ -1,0 +1,23 @@
+# Local configuration: holds the EC2 instance id, internal IP and SSH key path.
+# Never commit this. Copy config.example.env to config.env and edit that.
+config.env
+config.toml
+
+# No trailing slash: `node_modules/` matches a directory but not a *symlink*
+# named node_modules, and one of those was committed once by `git add -A` in a
+# worktree that had been linked to the main checkout's modules.
+node_modules
+dist/
+*.log
+.DS_Store
+
+# Viewer runtime state (session registry, aliases, layout)
+.state/
+
+# Local working notes for Claude Code. Deliberately not committed: durable
+# facts belong in docs/, which is. See CLAUDE.md itself for the convention.
+CLAUDE.md
+
+# Working plan drafts. Local and disposable, like CLAUDE.md above: a plan
+# that is settled and worth keeping belongs in an ADR (docs/adr/) instead.
+docs/plan/

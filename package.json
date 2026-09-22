@@ -1,0 +1,33 @@
+{
+  "name": "superterminal",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Low-latency viewer and manager for Claude Code sessions, local and on the fire EC2 instance",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "postinstall": "node scripts/fix-pty-helper.mjs",
+    "dev": "bash scripts/dev.sh",
+    "dev:server": "npm run dev --workspace @cv/server",
+    "dev:web": "npm run dev --workspace @cv/web",
+    "build": "npm run build --workspace @cv/web",
+    "test": "node scripts/tests/run.mjs",
+    "test:api": "node scripts/tests/run-api.mjs",
+    "typecheck": "tsc -p packages/shared/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/web/tsconfig.json",
+    "gate": "npm run typecheck && npm test && npm run test:api && npm run build",
+    "viewer": "bash scripts/viewer.sh",
+    "start": "npm run start --workspace @cv/server",
+    "bench:pty": "node scripts/bench-pty.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3"
+  }
+}
