@@ -20,15 +20,12 @@ npm install               # workspace install; postinstall fixes node-pty's spaw
 npm run dev                # server under node --watch + Vite on :5173, hot reload
 npm run viewer              # builds the UI, serves it on :8788, prints the token URL
 npm run typecheck           # tsc --noEmit across packages/shared, apps/server, apps/web
+npm run lint                 # eslint . — flat config at eslint.config.mjs
 npm test                    # unit tests (scripts/tests/*.test.mjs), no server needed
 npm run test:api            # API tests against a throwaway server + stub ssh/tmux/claude rig
 npm run build                # builds apps/web/dist
-npm run gate                 # typecheck && test && test:api && build — the merge gate
+npm run gate                 # typecheck && lint && test && test:api && build — the merge gate
 ```
-
-There is no lint step yet (no ESLint config exists in this repo) — see
-`docs/plan/add-lint-job.md` if present locally (that directory is
-gitignored, so it may not be).
 
 ## Layout
 
@@ -51,8 +48,8 @@ gitignored, so it may not be).
 ## Workflow
 
 Changes are made in a git worktree, on its own branch, and reach `main`
-only through a pull request whose `build` and `test` GitHub Actions checks
-are green — never a local fast-forward merge. Full steps, including the
+only through a pull request whose `build`, `lint`, and `test` GitHub Actions
+checks are green — never a local fast-forward merge. Full steps, including the
 worktree layout and rebase discipline: [docs/WORKFLOW.md](docs/WORKFLOW.md).
 Why: [docs/adr/0010](docs/adr/0010-work-in-worktrees-and-merge-through-a-green-pipeline.md)
 and [docs/adr/0011](docs/adr/0011-github-actions-ci-and-merging-through-pull-requests.md).

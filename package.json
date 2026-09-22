@@ -19,7 +19,8 @@
     "test": "node scripts/tests/run.mjs",
     "test:api": "node scripts/tests/run-api.mjs",
     "typecheck": "tsc -p packages/shared/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/web/tsconfig.json",
-    "gate": "npm run typecheck && npm test && npm run test:api && npm run build",
+    "lint": "eslint .",
+    "gate": "npm run typecheck && npm run lint && npm test && npm run test:api && npm run build",
     "viewer": "bash scripts/viewer.sh",
     "start": "npm run start --workspace @cv/server",
     "bench:pty": "node scripts/bench-pty.mjs",
@@ -28,6 +29,10 @@
   "devDependencies": {
     "@types/node": "^22.20.4",
     "@types/ws": "^8.18.1",
-    "typescript": "^5.9.3"
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1"
   }
 }
