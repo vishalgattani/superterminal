@@ -1,0 +1,10 @@
+#!/bin/bash
+# Fake ssh: ignores every option, runs the last argument locally, so the
+# server's remote commands hit the fake tmux below. `touch rig/down` makes it
+# behave like an unreachable host.
+RIG="$(cd "$(dirname "$0")/.." && pwd)"
+echo "ssh $*" >> "$RIG/ssh.log"
+if [ -e "$RIG/down" ]; then echo "ssh: connect to host fake port 22: Operation timed out" >&2; exit 255; fi
+cmd="${@: -1}"
+export PATH="$RIG/bin:$PATH" FAKE_TMUX_DIR="$RIG/tmux"
+exec sh -c "$cmd"

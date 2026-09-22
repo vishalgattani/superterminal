@@ -1,0 +1,29 @@
+#!/bin/bash
+# Fake tmux: a session is a file holding the pid of its "client". Enough for
+# new-session -A, attach, list-sessions and kill-session, with tmux's own
+# error text for a missing session.
+D="$FAKE_TMUX_DIR"; mkdir -p "$D"
+sub="$1"; shift
+case "$sub" in
+  list-sessions)
+    for f in "$D"/*; do [ -e "$f" ] && echo "$(basename "$f")|/tmp"; done; exit 0;;
+  kill-session)
+    t=""; while [ $# -gt 0 ]; do [ "$1" = "-t" ] && t="$2"; shift; done
+    name="${t#=}"
+    if [ ! -e "$D/$name" ]; then echo "can't find session: $name" >&2; exit 1; fi
+    pid=$(cat "$D/$name"); rm -f "$D/$name"; kill "$pid" 2>/dev/null; exit 0;;
+  list-panes)
+    # Two callers, two formats: the viewer's cwd tracker asks for each pane's
+    # path, and claude-agents.py asks for `<pid> <session>`.
+    case "$*" in
+      *pane_current_path*) cat "$D/../cwd-panes.txt" 2>/dev/null; exit 0;;
+    esac
+    cat "$D/../panes.txt" 2>/dev/null; exit 0;;
+  new-session)
+    name=""; while [ $# -gt 0 ]; do case "$1" in -s) name="$2"; shift;; esac; shift; done
+    echo $$ > "$D/$name"; exec cat;;
+  attach)
+    t=""; while [ $# -gt 0 ]; do [ "$1" = "-t" ] && t="$2"; shift; done
+    [ -e "$D/$t" ] || { echo "can't find session: $t" >&2; exit 1; }
+    echo $$ > "$D/$t"; exec cat;;
+esac

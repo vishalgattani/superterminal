@@ -1,0 +1,5 @@
+#!/bin/bash
+# Fake claude: `agents --json` prints whatever the test put in agents.json.
+RIG="$(cd "$(dirname "$0")/.." && pwd)"
+if [ "$1" = "agents" ]; then cat "$RIG/agents.json" 2>/dev/null || echo "[]"; exit 0; fi
+exec cat

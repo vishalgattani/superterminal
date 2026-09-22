@@ -1,0 +1,3 @@
+#!/bin/bash
+if [ "$1" = "agents" ]; then echo "[]"; exit 0; fi
+exec cat
