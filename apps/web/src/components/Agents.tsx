@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import type { HostId } from "@cv/shared";
 import { useStore, type Orphan } from "../store.ts";
 import { hostStyle as hostColour } from "../lib/hostColour.ts";
 
@@ -350,18 +349,3 @@ const text: React.CSSProperties = {
   color: "#d0d0d8",
 };
 const warn: React.CSSProperties = { padding: "6px 10px", color: "#e0a33e", fontSize: 11 };
-const backdrop: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "#05050799",
-  display: "grid",
-  placeItems: "center",
-  zIndex: 1000,
-};
-const dialog: React.CSSProperties = {
-  width: "min(430px, calc(100vw - 32px))",
-  background: "#15151a",
-  border: "1px solid #2f2f39",
-  borderRadius: 12,
-  padding: "18px 20px",
-};

@@ -46,7 +46,7 @@ const HOME = /^\/(Users|home)\/[^/]+/;
  * remote `~`, `/home/me` and `/home/me/x` all share it; anything else roots at `/`.
  */
 function segmentsOf(cwd: string): string[] {
-  let p = cwd.trim();
+  const p = cwd.trim();
   if (!p || p === "~") return ["~"];
   if (p.startsWith("~/")) {
     return ["~", ...p.slice(2).split("/").filter(Boolean)];

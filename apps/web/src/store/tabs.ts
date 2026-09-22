@@ -214,7 +214,7 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
               groups:
                 Array.isArray(body.groups) && body.groups.length > 0
                   ? body.groups.map(
-                      (g: { name: string; hue: number; members: string[] }, i: number) => ({
+                      (g: { name: string; hue: number; members: string[] }) => ({
                         id: uid("g"),
                         ...g,
                       }),
@@ -358,7 +358,7 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
             name: tabName,
             positions: {},
             members: sessions,
-            groups: groups.map((g, i) => ({
+            groups: groups.map((g) => ({
               id: uid("g"),
               name: g.name,
               hue: g.hue,

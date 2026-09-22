@@ -1,12 +1,9 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type { HostId } from "@cv/shared";
 import { REPO_ROOT, remoteById, type Config } from "../config.ts";
 import { sshArgs } from "../remote/ssh.ts";
-
-const run = promisify(execFile);
 
 /**
  * Session status by polling `claude agents --json`.

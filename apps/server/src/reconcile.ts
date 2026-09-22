@@ -16,7 +16,7 @@ const execFileAsync = promisify(execFile);
  * in the Agents panel.
  */
 export async function reconcileRemote(ctx: AppContext): Promise<number> {
-  const { config, ptys } = ctx;
+  const { config } = ctx;
   // Every remote is reconciled, and one being unreachable must not stop the
   // others: a box off the VPN is a normal condition, not a failure.
   const counts = await Promise.all(

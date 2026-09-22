@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import type { State, UiSlice } from "./model.ts";
 
 /** Which host and view the app is showing. */
-export const createUiSlice: StateCreator<State, [], [], UiSlice> = (set, get) => ({
+export const createUiSlice: StateCreator<State, [], [], UiSlice> = (set) => ({
   token: new URLSearchParams(location.search).get("token") ?? "",
   hosts: [],
   defaultCwd: "",
