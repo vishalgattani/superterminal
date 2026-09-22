@@ -1,5 +1,7 @@
 # superterminal
 
+*A terminal of terminals for Claude, by Claude.*
+
 A low-latency browser terminal for running and watching Claude Code sessions,
 locally and on the "fire" EC2 instance. Sessions live in tmux on the remote
 box, so they outlive the connection, the tab and the viewer itself.
