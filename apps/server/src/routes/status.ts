@@ -5,7 +5,7 @@ import type { AppContext } from "../context.ts";
 
 /** Health, hosts, live status and the instance light. */
 export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): void {
-  const { config, hosts, hostStatuses, ptys, agents, fireInstance, transcripts, costs, links, OWN_PIDS } = ctx;
+  const { config, hosts, hostStatuses, ptys, agents, fireInstance, transcripts, costs, contexts, links, OWN_PIDS } = ctx;
 
   app.get("/api/health", async () => ({
     ok: true,
@@ -38,6 +38,7 @@ export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): voi
       const sameCwd = rows.filter((r) => r.cwd === info.cwd && !r.tmuxSession);
       const row = byTmux ?? (sameCwd.length === 1 ? sameCwd[0] : undefined);
       const cost = costs.get(info.sessionId);
+      const context = contexts.get(info.sessionId);
       return {
         sessionId: info.sessionId,
         // Where the terminal is working now, kept current by the cwd tracker.
@@ -48,6 +49,7 @@ export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): voi
         waitingFor: row?.waitingFor,
         kind: row?.kind,
         costUsd: cost?.sessionUsd,
+        contextPct: context?.pct,
         // Claude's own session id for this terminal, when a Claude is running
         // in it. Distinct from our terminal id: this is the one `--resume`
         // takes and the one another session can be pointed at.

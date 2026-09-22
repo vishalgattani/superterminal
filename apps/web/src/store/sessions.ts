@@ -311,6 +311,14 @@ export const createSessionsSlice: StateCreator<State, [], [], SessionsSlice> = (
     }
   },
 
+  compactSession: async (terminalId) => {
+    const { token } = get();
+    await fetch(`/api/sessions/${terminalId}/compact`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+
   reconcile: (terminals) =>
     set((s) => {
       const alive = new Set(terminals.map((t) => t.sessionId));
