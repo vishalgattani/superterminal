@@ -292,7 +292,7 @@ Everything a newcomer needs is above. Everything else lives in `docs/`.
 **Changes are made in a git worktree and merged through a pull request only
 once the gate is green**: see [docs/WORKFLOW.md](docs/WORKFLOW.md). `npm run
 gate` is that gate — typecheck, unit tests, API tests against a stub rig, and
-the build — and it also runs as the `build` GitHub Actions check
+the build — and it also runs as the `build` and `test` GitHub Actions checks
 ([.github/workflows/build.yml](.github/workflows/build.yml)) on every pull
 request.
 

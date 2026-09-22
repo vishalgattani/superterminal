@@ -8,10 +8,11 @@ this way: [ADR 0010](adr/0010-work-in-worktrees-and-merge-through-a-green-pipeli
 0010's GitLab-specific parts).
 
 > **CI runs on every pull request:** `.github/workflows/build.yml` runs the
-> same four checks as `npm run gate` (typecheck, unit, api, build). Branch
-> protection requiring it to pass is not turned on yet, but is coming soon —
-> until then the discipline is the same either way: a red gate does not get
-> merged.
+> same four checks as `npm run gate` (typecheck, unit, api, build), split
+> across two parallel jobs, `build` (typecheck, build) and `test` (unit,
+> api). Branch protection requiring them to pass is not turned on yet, but
+> is coming soon — until then the discipline is the same either way: a red
+> gate does not get merged.
 
 ```
 fetch  →  worktree  →  change + test  →  rebase  →  npm run gate  →  merge  →  clean up
@@ -103,25 +104,26 @@ follow-up left open.
 
 Merge only when **all** of these hold:
 
-- the `build` GitHub Actions check (typecheck, unit, api, build — the same
-  four checks `npm run gate` runs) passes on the **current head** of the
-  pull request, after the rebase and not before it;
+- the `build` and `test` GitHub Actions checks (typecheck, unit, api, build —
+  the same four checks `npm run gate` runs, split across two parallel jobs)
+  pass on the **current head** of the pull request, after the rebase and not
+  before it;
 - the branch is rebased on the current `main`;
 - there are no unresolved review threads.
 
 ```bash
 npm run gate                # typecheck, unit, api, build; in the worktree, before pushing
 git push --force-with-lease # after a rebase, onto your own branch only
-gh pr checks                # wait for build to go green on GitHub
+gh pr checks                # wait for build and test to go green on GitHub
 gh pr merge --squash --delete-branch
 ```
 
 **`main` is merged into only through the pull request, never by a local
-`git merge --ff-only` in the main checkout.** GitHub is where the check runs
+`git merge --ff-only` in the main checkout.** GitHub is where the checks run
 and where the merge happens; the main checkout is not touched until you pull
-the result of it. Branch protection requiring `build` to pass before merge is
-not turned on yet — until then this is discipline, not enforcement, so treat a
-red check exactly as if it blocked the merge button.
+the result of it. Branch protection requiring `build` and `test` to pass
+before merge is not turned on yet — until then this is discipline, not
+enforcement, so treat a red check exactly as if it blocked the merge button.
 
 - **A feature and its tests are two branches, merged in that order.** The tests
   are written to fail on the old code, so merging them first would put a red
@@ -136,8 +138,8 @@ red check exactly as if it blocked the merge button.
 See [ADR 0011](adr/0011-github-actions-ci-and-merging-through-pull-requests.md)
 for why this replaced the local fast-forward merge.
 
-If the gate (locally or in `build`) fails, fix it or say why it is not this
-change's doing. **Never skip it, never merge red, never retry until it goes
+If the gate (locally or in `build` or `test`) fails, fix it or say why it is
+not this change's doing. **Never skip it, never merge red, never retry until it goes
 green without reading why it failed.** A test that fails intermittently is a
 bug in the test or the code, and gets fixed.
 
@@ -178,8 +180,8 @@ What the owner then does depends on how the viewer is running:
   `config.env` is gitignored and holds the instance id, IP, key path and
   token; never commit it, and keep those values out of commit messages and
   pull request descriptions.
-- **Turning on branch protection** for `main` requiring the `build` check
-  (below) — planned, not yet enabled.
+- **Turning on branch protection** for `main` requiring the `build` and
+  `test` checks (below) — planned, not yet enabled.
 
 ## One-time bootstrap
 
@@ -192,16 +194,23 @@ through pull requests.
 ## CI
 
 `.github/workflows/build.yml` runs on every push to `main` and every pull
-request targeting it: `npm run typecheck`, `npm test`, `npm run test:api`,
-`npm run build` — the same four checks `npm run gate` runs locally, kept as
-separate steps so a failure names which one broke. Node 22, matching
-`engines.node` in `package.json`; `node-pty` compiles a native module during
-`npm ci`, which `ubuntu-latest`'s toolchain handles without extra setup.
+request targeting it, as two parallel jobs with no `needs:` between them —
+the same four checks `npm run gate` runs locally, split so a failure names
+which side broke without opening the log:
 
-Branch protection requiring `build` to pass before merge is not turned on
-yet — the owner's call, planned once the workflow has run cleanly a few
-times. Until then, a red `build` check on a pull request is treated as
-blocking by discipline, the same as a red `npm run gate` always has been.
+- **`build`**: `npm run typecheck`, `npm run build`.
+- **`test`**: `npm test`, `npm run test:api`.
+
+Each job does its own checkout and `npm ci`, since jobs run on separate
+runners with no shared filesystem. Node 22, matching `engines.node` in
+`package.json`; `node-pty` compiles a native module during `npm ci`, which
+`ubuntu-latest`'s toolchain handles without extra setup.
+
+Branch protection requiring `build` and `test` to pass before merge is not
+turned on yet — the owner's call, planned once the workflow has run cleanly
+a few times. Until then, a red `build` or `test` check on a pull request is
+treated as blocking by discipline, the same as a red `npm run gate` always
+has been.
 See [ADR 0011](adr/0011-github-actions-ci-and-merging-through-pull-requests.md).
 
 ## Why not the main checkout
