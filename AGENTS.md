@@ -51,8 +51,8 @@ gitignored, so it may not be).
 ## Workflow
 
 Changes are made in a git worktree, on its own branch, and reach `main`
-only through a pull request whose `build` GitHub Actions check is
-green — never a local fast-forward merge. Full steps, including the
+only through a pull request whose `build` and `test` GitHub Actions checks
+are green — never a local fast-forward merge. Full steps, including the
 worktree layout and rebase discipline: [docs/WORKFLOW.md](docs/WORKFLOW.md).
 Why: [docs/adr/0010](docs/adr/0010-work-in-worktrees-and-merge-through-a-green-pipeline.md)
 and [docs/adr/0011](docs/adr/0011-github-actions-ci-and-merging-through-pull-requests.md).
