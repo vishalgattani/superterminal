@@ -24,6 +24,8 @@ export interface SessionNodeData extends Record<string, unknown> {
   canReattach: boolean;
   /** Session cost in USD, when a statusline has reported one. */
   costUsd?: number;
+  /** Context window used, 0-100, when a statusline has reported one. */
+  contextPct?: number;
   /** The Claude model this terminal was started with, when one was asked for. */
   model?: string;
   /** Subagents of the Claude running here, from the last transcript scan. */
@@ -71,11 +73,33 @@ export function SessionNode({ id, data, selected }: NodeProps) {
   const renaming = useStore((s) => s.renamingId === id);
   const startRename = useStore((s) => s.startRename);
   const setAlias = useStore((s) => s.setAlias);
+  const compactSession = useStore((s) => s.compactSession);
   // An explicit toggle rather than hover: a card that appears on hover gets
   // in the way while dragging and disappears the moment you reach for it.
   const [infoOpen, setInfoOpen] = useState(false);
   const [draft, setDraft] = useState(d.label);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Compact is not idempotent mid-flight: the button goes back to enabled
+  // once the next status poll actually shows the percentage drop, not on a
+  // timer and not just because the click landed. The captured value is what
+  // "dropped" is measured against, so a poll that lands before the terminal
+  // has even echoed the command back does not clear the guard early.
+  const [compacting, setCompacting] = useState(false);
+  const compactStartPct = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!compacting) return;
+    if (compactStartPct.current !== undefined && d.contextPct !== undefined && d.contextPct < compactStartPct.current) {
+      setCompacting(false);
+    }
+  }, [compacting, d.contextPct]);
+  // A statusline can lag or stop updating; a stuck "compacting…" forever
+  // would be worse than a guard that gives up and lets the owner try again.
+  useEffect(() => {
+    if (!compacting) return;
+    const t = setTimeout(() => setCompacting(false), 90_000);
+    return () => clearTimeout(t);
+  }, [compacting]);
 
   useEffect(() => {
     if (!renaming) return;
@@ -260,6 +284,38 @@ export function SessionNode({ id, data, selected }: NodeProps) {
               ${d.costUsd.toFixed(2)}
             </span>
           )}
+          {/* Only for a node actually running Claude, same gate the model
+              pill uses: a plain shell has no context window to show. */}
+          {d.claudeSessionId !== undefined && d.contextPct !== undefined && (
+            <ContextRing pct={d.contextPct} />
+          )}
+          {d.claudeSessionId !== undefined && (
+            <button
+              title={
+                d.contextPct === undefined
+                  ? "Context usage unknown"
+                  : d.contextPct < 80
+                    ? "Compact once context usage reaches 80%"
+                    : "Run /compact in this terminal"
+              }
+              onMouseDown={swallow}
+              onClick={(e) => {
+                swallow(e);
+                if (compacting) return;
+                compactStartPct.current = d.contextPct;
+                setCompacting(true);
+                void compactSession(id);
+              }}
+              disabled={compacting || d.contextPct === undefined || d.contextPct < 80}
+              style={{
+                ...compactButton,
+                opacity: compacting || d.contextPct === undefined || d.contextPct < 80 ? 0.5 : 1,
+                cursor: compacting || d.contextPct === undefined || d.contextPct < 80 ? "default" : "pointer",
+              }}
+            >
+              {compacting ? "compacting…" : "Compact"}
+            </button>
+          )}
           {/* On a tmux host the pty exiting usually means the connection
               dropped while the remote work carried on, so offer to rejoin. */}
           {d.exited && d.canReattach && (
@@ -291,6 +347,9 @@ export function SessionNode({ id, data, selected }: NodeProps) {
           <Row k="session" v={d.sessionId.slice(0, 8)} mono />
           {d.costUsd !== undefined && (
             <Row k="cost" v={`$${d.costUsd.toFixed(2)} this session`} />
+          )}
+          {d.contextPct !== undefined && (
+            <Row k="context" v={`${d.contextPct}% used`} />
           )}
           {d.claudeName && <Row k="claude" v={d.claudeName} />}
           {d.claudeSessionId && (
@@ -341,6 +400,60 @@ const costPill: React.CSSProperties = {
   color: "#8fd0a0",
   border: "1px solid #2c4a35",
   fontVariantNumeric: "tabular-nums",
+};
+
+/** Below 50% blue, 50-80% yellow, 80%+ red — the same stops the Claude Code app uses. */
+function ringColour(pct: number): string {
+  return pct < 50 ? "#5b8cff" : pct < 80 ? "#e0c23e" : "#e05b5b";
+}
+
+const RING_R = 6;
+const RING_C = 2 * Math.PI * RING_R;
+
+/**
+ * A tiny circular progress indicator for context-window usage, hand-rolled
+ * as inline SVG rather than a chart dependency, the same call `PresetDiagram`
+ * already makes for something this small.
+ */
+function ContextRing({ pct }: { pct: number }) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const offset = RING_C - (clamped / 100) * RING_C;
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 16 16"
+      role="img"
+      aria-label={`${clamped}% of context window used`}
+    >
+      <title>{`${clamped}% of context window used`}</title>
+      <circle cx={8} cy={8} r={RING_R} fill="none" stroke="#2a2a32" strokeWidth={2.5} />
+      <circle
+        cx={8}
+        cy={8}
+        r={RING_R}
+        fill="none"
+        stroke={ringColour(clamped)}
+        strokeWidth={2.5}
+        strokeDasharray={RING_C}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        // Start at 12 o'clock and grow clockwise, the way a percentage reads.
+        transform="rotate(-90 8 8)"
+      />
+    </svg>
+  );
+}
+
+const compactButton: React.CSSProperties = {
+  background: "#241a1a",
+  border: "1px solid #4a2c2c",
+  color: "#e0a0a0",
+  borderRadius: 4,
+  padding: "1px 7px",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: 10,
 };
 
 const reattachButton: React.CSSProperties = {

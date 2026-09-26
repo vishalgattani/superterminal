@@ -83,6 +83,28 @@ export function registerSessionsRoutes(app: FastifyInstance, ctx: AppContext): v
   });
 
   /**
+   * Run `/compact` in a session's own terminal.
+   *
+   * Deliberately its own endpoint rather than a call to `/input`: `/input` is
+   * gated on a link because it lets one session drive another, and a link
+   * only ever *types* (never submits) so the owner reviews what lands in
+   * another session's terminal before it runs. This writes into the
+   * session's own terminal and submits unattended — there is no "someone
+   * else reviews this" step for a single well-known slash command the owner
+   * chose to run by clicking Compact.
+   */
+  app.post("/api/sessions/:id/compact", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const session = ptys.get(id);
+    if (!session) return reply.code(404).send({ error: "no such session" });
+    const encoder = new TextEncoder();
+    ptys.write(id, encoder.encode("/compact"));
+    // Enter as a separate write, so a paste-bracketing terminal still runs it.
+    setTimeout(() => ptys.write(id, encoder.encode("\r")), 120);
+    return { ok: true };
+  });
+
+  /**
    * Type text into a session's terminal.
    *
    * This is how one session talks to another: the viewer writes a prompt into

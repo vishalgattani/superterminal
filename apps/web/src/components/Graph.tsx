@@ -183,6 +183,7 @@ function GraphInner() {
               canReattach: isRemoteHost(info.host),
               model: info.model,
               costUsd: activity[id]?.costUsd,
+              contextPct: activity[id]?.contextPct,
               claudeName: activity[id]?.claudeName,
               claudeSessionId: activity[id]?.claudeSessionId,
               // Keyed by Claude's session id, not the terminal's: subagents

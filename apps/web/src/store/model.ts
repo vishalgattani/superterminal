@@ -19,6 +19,8 @@ export interface SessionActivity {
   kind?: string;
   /** Session cost in USD, scraped from the statusline in the terminal. */
   costUsd?: number;
+  /** Context window used, 0-100, scraped from the statusline in the terminal. */
+  contextPct?: number;
   /** Claude's own session id, the one `--resume` takes. */
   claudeSessionId?: string;
 }
@@ -240,6 +242,8 @@ export interface SessionsSlice {
   forkSession: (terminalId: string) => Promise<void>;
   /** Open a terminal running `claude --resume` for a past session. */
   resumeSession: (host: HostId, cwd: string, sessionId: string) => Promise<void>;
+  /** Run `/compact` in a session's own terminal, submitted unattended. */
+  compactSession: (terminalId: string) => Promise<void>;
   /** Drop nodes for terminals the server no longer has. */
   reconcile: (terminals: SessionInfo[]) => void;
 }
