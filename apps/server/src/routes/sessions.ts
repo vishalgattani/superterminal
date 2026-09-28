@@ -202,6 +202,15 @@ export function registerSessionsRoutes(app: FastifyInstance, ctx: AppContext): v
     persistLinks();
     return { ok: true };
   });
+
+  /**
+   * Search every open terminal's recent output at once, for the command
+   * palette. Only live terminals: a closed one's text is not a place to jump to.
+   */
+  app.get("/api/search", async (req) => {
+    const q = String((req.query as { q?: string }).q ?? "").slice(0, 200);
+    return { hits: ctx.output.search(q).filter((h) => ptys.get(h.sessionId)) };
+  });
 }
 
 function clamp(n: number, lo: number, hi: number): number {
