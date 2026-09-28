@@ -8,6 +8,7 @@ interface PresetNode {
   cwd: string;
   label: string;
   claude: boolean;
+  claudeSessionId?: string;
 }
 interface Preset {
   name: string;

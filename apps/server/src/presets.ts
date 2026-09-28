@@ -21,6 +21,11 @@ export interface PresetNode {
   label: string;
   /** Start Claude in this terminal, rather than leaving a shell. */
   claude: boolean;
+  /**
+   * The Claude session this terminal was running when saved. Deploy resumes
+   * it, so a saved graph brings back the conversations, not fresh ones.
+   */
+  claudeSessionId?: string;
 }
 
 export interface PresetEdge {
