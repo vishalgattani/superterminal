@@ -8,6 +8,7 @@ interface PresetNode {
   cwd: string;
   label: string;
   claude: boolean;
+  claudeSessionId?: string;
 }
 interface Preset {
   name: string;
@@ -71,7 +72,12 @@ export function Presets({ onClose }: { onClose: () => void }) {
       // Deploying opens a view holding exactly what it spawned, so the result
       // is one workflow on screen, not a few more nodes among everything else.
       if (Array.isArray(body.sessions) && body.sessions.length > 0) {
-        adoptDeployed(p.name, body.sessions, Array.isArray(body.groups) ? body.groups : []);
+        adoptDeployed(
+          p.name,
+          body.sessions,
+          Array.isArray(body.groups) ? body.groups : [],
+          Array.isArray(body.notes) ? body.notes : [],
+        );
       }
       const failed = (body.failed ?? []) as { label: string; error: string }[];
       const notStarted = (body.notStarted ?? []) as { label: string; hint: string }[];

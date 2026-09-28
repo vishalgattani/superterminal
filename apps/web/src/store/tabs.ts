@@ -3,8 +3,16 @@ import type { SessionInfo } from "@cv/shared";
 import { layoutGraph } from "../lib/layout.ts";
 import { buildFolderTree } from "../lib/folders.ts";
 import { emptyRetained, hydrateViews, resolveRetained, serializeViews } from "../lib/persist.ts";
-import { OVERVIEW_TAB, externalOrphans, foreignId, uid, viewSessionIds } from "./model.ts";
-import type { NodeGroup, State, TabsSlice } from "./model.ts";
+import { NOTE_PREFIX, OVERVIEW_TAB, externalOrphans, foreignId, uid, viewSessionIds } from "./model.ts";
+import type { CanvasNote, GraphTab, NodeGroup, State, TabsSlice } from "./model.ts";
+
+const withIds = (notes: Omit<CanvasNote, "id">[] | undefined): CanvasNote[] =>
+  (notes ?? []).map((n) => ({ ...n, id: uid(NOTE_PREFIX) }));
+
+const mapNotes = (t: GraphTab, f: (notes: CanvasNote[]) => CanvasNote[]): GraphTab => ({
+  ...t,
+  notes: f(t.notes ?? []),
+});
 
 /** Graph views (tabs), their layouts and group frames. */
 export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get) => ({
@@ -223,7 +231,14 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
     set({
       tabs: [
         ...s.tabs,
-        { id: newId, name: `${source.name} copy`, positions: {}, members: [] },
+        // Notes are not sessions, so they are copied as they are.
+        {
+          id: newId,
+          name: `${source.name} copy`,
+          positions: {},
+          members: [],
+          notes: withIds(source.notes),
+        },
       ],
       activeTab: newId,
     });
@@ -390,7 +405,65 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
     }));
   },
 
-  adoptDeployed: (tabName, sessions, groups) =>
+  activeNotes: () => {
+    const s = get();
+    return (s.tabs.find((t) => t.id === s.activeTab)?.notes ?? []).map(({ id: _, ...n }) => n);
+  },
+
+  moveToView: (ids, target) =>
+    set((s) => {
+      const newId = target ?? uid("t");
+      const tabs = target
+        ? s.tabs
+        : [...s.tabs, { id: newId, name: `view ${s.tabs.length + 1}`, positions: {}, members: [] }];
+      const gone = new Set(ids);
+      return {
+        tabs: tabs.map((t) => {
+          if (t.id === newId && t.members) {
+            const have = new Set(t.members);
+            return { ...t, members: [...t.members, ...ids.filter((id) => s.sessions[id] && !have.has(id))] };
+          }
+          if (t.id === s.activeTab && t.members && t.id !== newId) {
+            return {
+              ...t,
+              members: t.members.filter((m) => !gone.has(m)),
+              groups: t.groups
+                ?.map((g) => ({ ...g, members: g.members.filter((m) => !gone.has(m)) }))
+                .filter((g) => g.members.length > 0),
+            };
+          }
+          return t;
+        }),
+        ...(target ? {} : { activeTab: newId }),
+      };
+    }),
+
+  addNote: (x, y) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === s.activeTab
+          ? mapNotes(t, (ns) => [...ns, { id: uid(NOTE_PREFIX), text: "", x, y, w: 240, h: 140 }])
+          : t,
+      ),
+    })),
+
+  updateNote: (id, patch) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.notes?.some((n) => n.id === id)
+          ? mapNotes(t, (ns) => ns.map((n) => (n.id === id ? { ...n, ...patch } : n)))
+          : t,
+      ),
+    })),
+
+  removeNote: (id) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.notes?.some((n) => n.id === id) ? mapNotes(t, (ns) => ns.filter((n) => n.id !== id)) : t,
+      ),
+    })),
+
+  adoptDeployed: (tabName, sessions, groups, notes) =>
     set((s) => {
       // A deploy creates sessions, so they belong on a view of their own, holding
       // exactly what was spawned, rather than being merged into what is on screen.
@@ -409,6 +482,7 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
               hue: g.hue,
               members: g.members,
             })),
+            notes: withIds(notes),
           },
         ],
         activeTab: id,

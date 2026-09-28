@@ -29,6 +29,7 @@ export function SaveGraph() {
   const arrange = useStore((s) => s.arrange);
   const activeGroups = useStore((s) => s.activeGroups);
   const activeMembers = useStore((s) => s.activeMembers);
+  const activeNotes = useStore((s) => s.activeNotes);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -51,6 +52,7 @@ export function SaveGraph() {
           name: name.trim(),
           groups: activeGroups(),
           members: activeMembers(),
+          notes: activeNotes(),
         }),
       });
       const body = await res.json();

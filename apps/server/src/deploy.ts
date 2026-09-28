@@ -1,5 +1,5 @@
 import type { AppContext } from "./context.ts";
-import type { PresetEdge, PresetGroup, PresetNode } from "./presets.ts";
+import type { PresetEdge, PresetGroup, PresetNode, PresetNote } from "./presets.ts";
 
 /**
  * Deploy a preset: spawn its terminals, wait for Claude to register, then wire
@@ -22,6 +22,7 @@ export async function deployGraph(
     nodes: PresetNode[];
     edges: PresetEdge[];
     groups?: PresetGroup[];
+    notes?: PresetNote[];
   },
 ) {
   const { hostStatuses, ptys, agents, links, linkExists, persistLinks } = ctx;
@@ -42,6 +43,7 @@ export async function deployGraph(
         rows: 45,
         alias: node.label,
         startClaude: node.claude,
+        resume: node.claude ? node.claudeSessionId : undefined,
       });
       created.push({ index, sessionId: info.sessionId, label: node.label });
     } catch (err) {
@@ -107,6 +109,7 @@ export async function deployGraph(
   return {
     preset: preset.name,
     groups,
+    notes: preset.notes ?? [],
     spawned: created.length,
     claudeStarted: claudeNodes.length - notStarted.length,
     claudeExpected: claudeNodes.length,

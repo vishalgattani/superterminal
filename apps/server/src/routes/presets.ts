@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { HostId } from "@cv/shared";
-import type { PresetEdge, PresetGroup, PresetNode } from "../presets.ts";
+import { cleanNotes, type PresetEdge, type PresetGroup, type PresetNode } from "../presets.ts";
 import type { AppContext } from "../context.ts";
 
 /** Saved graphs, and deploying them. */
@@ -16,6 +16,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
       // Frames live in the browser, so the client sends them by session id and
       // the server stores them as indices alongside the edges.
       groups?: { name: string; hue: number; members: string[] }[];
+      notes?: unknown;
       // The sessions to save, when saving from a view that shows a subset.
       // Omitted means everything that is open.
       members?: string[];
@@ -36,26 +37,30 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
       }
     }
     const index = new Map(open.map((s, i) => [s.sessionId, i]));
-    const claudeBySession = new Set(
+    const claudeByTmux = new Map(
       agents
         .all()
         .flatMap((a) => a.rows)
-        .map((r) => r.tmuxSession)
-        .filter(Boolean) as string[],
+        .filter((r) => r.tmuxSession)
+        .map((r) => [r.tmuxSession!, r]),
     );
     try {
       return {
         presets: presets.save({
           name: body.name.trim(),
           description: body.description,
-          nodes: open.map((s) => ({
-            host: s.host,
-            cwd: s.cwd,
-            label: s.alias || s.cwd.split("/").filter(Boolean).pop() || "terminal",
-            // Record whether a Claude was running here, so redeploying
-            // reproduces what you had rather than a row of bare shells.
-            claude: claudeBySession.has(s.tmuxSession ?? `cv-${s.sessionId.slice(0, 8)}`),
-          })),
+          nodes: open.map((s) => {
+            // Record which Claude was running here, so redeploying resumes the
+            // conversations you had rather than a row of bare shells.
+            const row = claudeByTmux.get(s.tmuxSession ?? `cv-${s.sessionId.slice(0, 8)}`);
+            return {
+              host: s.host,
+              cwd: s.cwd,
+              label: s.alias || s.cwd.split("/").filter(Boolean).pop() || "terminal",
+              claude: Boolean(row),
+              ...(row?.sessionId ? { claudeSessionId: row.sessionId } : {}),
+            };
+          }),
           edges: [...links.values()]
             .map((l) => ({ from: index.get(l.source), to: index.get(l.target) }))
             .filter((e): e is { from: number; to: number } =>
@@ -71,6 +76,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
             }))
             // A frame whose sessions are all gone is not worth saving.
             .filter((g) => g.members.length > 0),
+          notes: cleanNotes(body.notes),
         }),
       };
     } catch (err) {
@@ -112,6 +118,10 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
         cwd,
         label: String(raw?.label ?? cwd.split("/").filter(Boolean).pop() ?? "terminal"),
         claude: Boolean(raw?.claude),
+        // Passed to `claude --resume`, so only something shaped like an id.
+        ...(typeof raw?.claudeSessionId === "string" && /^[0-9a-f-]{36}$/i.test(raw.claudeSessionId)
+          ? { claudeSessionId: raw.claudeSessionId }
+          : {}),
       });
     }
 
@@ -154,6 +164,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
           nodes,
           edges,
           groups,
+          notes: cleanNotes((body as { notes?: unknown }).notes),
         }),
         imported: name,
       };
@@ -207,6 +218,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
       nodes: body.nodes,
       edges,
       groups: (body as { groups?: PresetGroup[] }).groups,
+      notes: cleanNotes((body as { notes?: unknown }).notes),
     });
   });
 }
