@@ -37,26 +37,30 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
       }
     }
     const index = new Map(open.map((s, i) => [s.sessionId, i]));
-    const claudeBySession = new Set(
+    const claudeByTmux = new Map(
       agents
         .all()
         .flatMap((a) => a.rows)
-        .map((r) => r.tmuxSession)
-        .filter(Boolean) as string[],
+        .filter((r) => r.tmuxSession)
+        .map((r) => [r.tmuxSession!, r]),
     );
     try {
       return {
         presets: presets.save({
           name: body.name.trim(),
           description: body.description,
-          nodes: open.map((s) => ({
-            host: s.host,
-            cwd: s.cwd,
-            label: s.alias || s.cwd.split("/").filter(Boolean).pop() || "terminal",
-            // Record whether a Claude was running here, so redeploying
-            // reproduces what you had rather than a row of bare shells.
-            claude: claudeBySession.has(s.tmuxSession ?? `cv-${s.sessionId.slice(0, 8)}`),
-          })),
+          nodes: open.map((s) => {
+            // Record which Claude was running here, so redeploying resumes the
+            // conversations you had rather than a row of bare shells.
+            const row = claudeByTmux.get(s.tmuxSession ?? `cv-${s.sessionId.slice(0, 8)}`);
+            return {
+              host: s.host,
+              cwd: s.cwd,
+              label: s.alias || s.cwd.split("/").filter(Boolean).pop() || "terminal",
+              claude: Boolean(row),
+              ...(row?.sessionId ? { claudeSessionId: row.sessionId } : {}),
+            };
+          }),
           edges: [...links.values()]
             .map((l) => ({ from: index.get(l.source), to: index.get(l.target) }))
             .filter((e): e is { from: number; to: number } =>
@@ -114,6 +118,10 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
         cwd,
         label: String(raw?.label ?? cwd.split("/").filter(Boolean).pop() ?? "terminal"),
         claude: Boolean(raw?.claude),
+        // Passed to `claude --resume`, so only something shaped like an id.
+        ...(typeof raw?.claudeSessionId === "string" && /^[0-9a-f-]{36}$/i.test(raw.claudeSessionId)
+          ? { claudeSessionId: raw.claudeSessionId }
+          : {}),
       });
     }
 

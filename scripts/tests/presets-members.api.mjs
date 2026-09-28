@@ -1,7 +1,9 @@
 // Saving a preset from a view: only the view's sessions, only the edges
 // between them, and frames remapped onto what was actually saved.
 import { check, report } from "./harness.mjs";
-import { call } from "./api-helper.mjs";
+import { writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { call, rigDir, until } from "./api-helper.mjs";
 
 const ids = [];
 for (const alias of ["a", "b", "c", "d"]) {
@@ -61,6 +63,19 @@ let dep;
 check("deploy hands the notes back", s === 200 && dep.notes?.[0]?.w === 200, JSON.stringify(dep.notes));
 await call("DELETE", "/api/presets/noted");
 for (const id of dep.sessions ?? []) await call("DELETE", `/api/sessions/${id}`);
+
+// a node running Claude saves its session id, and deploy resumes it (#21)
+const CS = "12345678-1234-4123-8123-123456789abc";
+// The stub reports this pid as running in the terminal's tmux session.
+writeFileSync(join(rigDir, "agents.json"), JSON.stringify([{ pid: process.pid, sessionId: CS, cwd: "/tmp", status: "idle" }]));
+writeFileSync(join(rigDir, "panes.txt"), `${process.pid} cv-${a.slice(0, 8)}\n`);
+await until(async () => (await call("GET", "/api/status"))[1].sessions.find((x) => x.sessionId === a)?.claudeSessionId === CS, 15000, 500);
+await call("POST", "/api/presets", { name: "resumable", members: [a, b] });
+p = await preset("resumable");
+check("a Claude terminal saves its session id, path and alias", p.nodes[0].claudeSessionId === CS && p.nodes[0].claude && p.nodes[0].cwd.endsWith("/tmp") && p.nodes[0].label === "a", JSON.stringify(p.nodes));
+check("a plain terminal saves just its path and alias", p.nodes[1].claudeSessionId === undefined && !p.nodes[1].claude && p.nodes[1].label === "b", JSON.stringify(p.nodes[1]));
+for (const f of ["agents.json", "panes.txt"]) rmSync(join(rigDir, f), { force: true });
+await call("DELETE", "/api/presets/resumable");
 
 // leave the rig as we found it, so test files do not depend on each other
 for (const name of ["all", "sub", "ord", "ghost"]) await call("DELETE", `/api/presets/${name}`);

@@ -43,6 +43,7 @@ export async function deployGraph(
         rows: 45,
         alias: node.label,
         startClaude: node.claude,
+        resume: node.claude ? node.claudeSessionId : undefined,
       });
       created.push({ index, sessionId: info.sessionId, label: node.label });
     } catch (err) {
