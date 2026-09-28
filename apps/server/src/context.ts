@@ -11,6 +11,7 @@ import { createLinkStore, type LinkStore } from "./links.ts";
 import { AgentPoller } from "./status/agents.ts";
 import { ContextScraper } from "./status/context.ts";
 import { ModelEffortScraper } from "./status/modelEffort.ts";
+import { OutputIndex } from "./status/outputIndex.ts";
 import { CostScraper } from "./status/cost.ts";
 import { CwdTracker } from "./status/cwd.ts";
 import { TranscriptIndex } from "./status/transcripts.ts";
@@ -66,6 +67,7 @@ export interface AppContext extends LinkStore {
   costs: CostScraper;
   contexts: ContextScraper;
   models: ModelEffortScraper;
+  output: OutputIndex;
   views: ViewsStore;
   /**
    * Set once boot re-adoption has finished. The browser waits for it before
@@ -110,6 +112,7 @@ export function createContext(): AppContext {
   const costs = new CostScraper();
   const contexts = new ContextScraper();
   const models = new ModelEffortScraper();
+  const output = new OutputIndex();
   const agents = new AgentPoller(config);
   // Read the dollar figure and the context percentage the statusline already
   // prints into the terminal. One tap, since PtyManager keeps only one.
@@ -117,6 +120,7 @@ export function createContext(): AppContext {
     costs.observe(sessionId, text);
     contexts.observe(sessionId, text);
     models.observe(sessionId, text);
+    output.observe(sessionId, text);
   });
 
   const ctx: AppContext = {
@@ -138,6 +142,7 @@ export function createContext(): AppContext {
     costs,
     contexts,
     models,
+    output,
     views: new ViewsStore(),
     boot: { ready: false, id: randomUUID() },
     OWN_PIDS: ancestorPids(),

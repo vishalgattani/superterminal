@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HostId, SessionInfo } from "@cv/shared";
 import { Agents } from "./components/Agents.tsx";
+import { CommandPalette } from "./components/CommandPalette.tsx";
 import { ConfirmClose } from "./components/ConfirmClose.tsx";
 import { ConfirmStop } from "./components/ConfirmStop.tsx";
 import { Graph } from "./components/Graph.tsx";
@@ -44,6 +45,7 @@ export default function App() {
   const [host, setHost] = useState<HostId>("local");
   const [cwd, setCwd] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [palette, setPalette] = useState(false);
   const [busy, setBusy] = useState(false);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [showPresets, setShowPresets] = useState(false);
@@ -198,6 +200,12 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) {
         return; // so does a form field
       }
+      if (e.key.toLowerCase() === "p" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        // Browsers print on Cmd/Ctrl+P; from the graph it opens the palette.
+        e.preventDefault();
+        setPalette(true);
+        return;
+      }
       if (e.key === "Tab") {
         e.preventDefault();
         // Keep focus on the graph so the next Tab cycles again instead of
@@ -259,6 +267,7 @@ export default function App() {
   return (
     <div style={styles.page}>
       <ConfirmClose />
+      {palette && <CommandPalette onClose={() => setPalette(false)} />}
       <ConfirmStop />
       {showPresets && <Presets onClose={() => setShowPresets(false)} />}
       {showHosts && <HostSettings onClose={() => setShowHosts(false)} />}
