@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { HostId } from "@cv/shared";
-import type { PresetEdge, PresetGroup, PresetNode } from "../presets.ts";
+import { cleanNotes, type PresetEdge, type PresetGroup, type PresetNode } from "../presets.ts";
 import type { AppContext } from "../context.ts";
 
 /** Saved graphs, and deploying them. */
@@ -16,6 +16,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
       // Frames live in the browser, so the client sends them by session id and
       // the server stores them as indices alongside the edges.
       groups?: { name: string; hue: number; members: string[] }[];
+      notes?: unknown;
       // The sessions to save, when saving from a view that shows a subset.
       // Omitted means everything that is open.
       members?: string[];
@@ -71,6 +72,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
             }))
             // A frame whose sessions are all gone is not worth saving.
             .filter((g) => g.members.length > 0),
+          notes: cleanNotes(body.notes),
         }),
       };
     } catch (err) {
@@ -154,6 +156,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
           nodes,
           edges,
           groups,
+          notes: cleanNotes((body as { notes?: unknown }).notes),
         }),
         imported: name,
       };
@@ -207,6 +210,7 @@ export function registerPresetsRoutes(app: FastifyInstance, ctx: AppContext): vo
       nodes: body.nodes,
       edges,
       groups: (body as { groups?: PresetGroup[] }).groups,
+      notes: cleanNotes((body as { notes?: unknown }).notes),
     });
   });
 }
