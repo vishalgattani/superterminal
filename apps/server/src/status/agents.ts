@@ -38,6 +38,8 @@ export type Activity = "working" | "waiting" | "idle" | "unknown";
 export interface HostAgents {
   host: HostId;
   rows: AgentRow[];
+  /** pid -> parent pid, local host only: ties a Claude row to the shell it runs under. */
+  parents?: Map<number, number>;
   error?: string;
   checkedAt: number;
 }
@@ -106,6 +108,48 @@ export function tally(
   };
 }
 
+/** `ps -A -o pid=,ppid=` into pid -> parent pid. */
+export function parseParents(stdout: string): Map<number, number> {
+  const parents = new Map<number, number>();
+  for (const line of stdout.split("\n")) {
+    const [pid = NaN, ppid = NaN] = line.trim().split(/\s+/).map(Number);
+    if (pid > 0 && ppid >= 0) parents.set(pid, ppid);
+  }
+  return parents;
+}
+
+function descendsFrom(pid: number, ancestor: number, parents: Map<number, number>): boolean {
+  for (let p: number | undefined = pid, hops = 0; p && hops < 64; hops++) {
+    if (p === ancestor) return true;
+    p = parents.get(p);
+  }
+  return false;
+}
+
+/**
+ * The `claude agents --json` row running in one terminal.
+ *
+ * Joined on the tmux session name when there is one. A bare local shell is
+ * joined on pid ancestry: its Claude is a descendant of the pty's shell. cwd
+ * was wrong there, because an unrelated Claude started outside the viewer in
+ * the same folder was the sole row at that cwd and claimed every new terminal
+ * opened beside it. cwd stays only for remote hosts without tmux, where the
+ * process tree is not visible, and then only when it is unambiguous.
+ */
+export function matchRow(
+  rows: AgentRow[],
+  t: { tmuxName: string; cwd?: string; shellPid?: number; parents?: Map<number, number> },
+): AgentRow | undefined {
+  const byTmux = rows.find((r) => r.tmuxSession === t.tmuxName);
+  if (byTmux) return byTmux;
+  if (t.shellPid && t.parents) {
+    const { shellPid, parents } = t;
+    return rows.find((r) => !r.tmuxSession && r.pid && descendsFrom(r.pid, shellPid, parents));
+  }
+  const sameCwd = rows.filter((r) => r.cwd === t.cwd && !r.tmuxSession);
+  return sameCwd.length === 1 ? sameCwd[0] : undefined;
+}
+
 /** Run a command with text on stdin, collecting stdout. */
 function pipeIn(
   file: string,
@@ -160,13 +204,18 @@ export class AgentPoller {
     try {
       const stdout = await this.exec(host);
       const rows = JSON.parse(stdout) as AgentRow[];
-      const result = { host, rows, checkedAt: now };
+      const parents =
+        host === "local"
+          ? parseParents((await run("ps", ["-A", "-o", "pid=,ppid="])).stdout)
+          : undefined;
+      const result = { host, rows, parents, checkedAt: now };
       this.cache.set(host, result);
       return result;
     } catch (err) {
       const result = {
         host,
         rows: this.cache.get(host)?.rows ?? [],
+        parents: this.cache.get(host)?.parents,
         error: (err as Error).message.split("\n")[0],
         checkedAt: now,
       };
