@@ -20,10 +20,11 @@ import { AddToView } from "./AddToView.tsx";
 import { FolderNode, type FolderNodeData } from "./FolderNode.tsx";
 import { ForeignNode, type ForeignNodeData } from "./ForeignNode.tsx";
 import { GroupFrames } from "./GroupFrames.tsx";
+import { ReconnectNode, type ReconnectNodeData } from "./ReconnectNode.tsx";
 import { SaveGraph } from "./SaveGraph.tsx";
 import { SessionNode, type SessionNodeData } from "./SessionNode.tsx";
 import { buildFolderTree } from "../lib/folders.ts";
-import { externalOrphans, foreignId, useStore, viewSessionIds } from "../store.ts";
+import { externalOrphans, foreignId, useStore, viewSessionIds, OVERVIEW_TAB } from "../store.ts";
 import { hostPalette } from "../lib/hostColour.ts";
 import { isRemoteHost } from "@cv/shared";
 import { canvasEnd } from "../lib/edgeEnds.ts";
@@ -33,7 +34,12 @@ const EMPTY_COUNTS: Record<string, number> = {};
 
 // Registered once at module level: inlining this remounts every node on each
 // render.
-const nodeTypes = { session: SessionNode, foreign: ForeignNode, folder: FolderNode };
+const nodeTypes = {
+  session: SessionNode,
+  foreign: ForeignNode,
+  folder: FolderNode,
+  reconnect: ReconnectNode,
+};
 
 /** Last path segment, or "~" for a home directory. */
 function folderName(cwd: string): string {
@@ -144,9 +150,34 @@ function GraphInner() {
     });
   }, [external, showForeign, isSubset, viewIds.length, positions, tabPositions]);
 
+  const retained = useStore((s) => s.retained);
+
+  // Saved members whose sessions did not come back, shown as actionable
+  // "reconnect" cards. Scoped like everything else: the overview shows keys
+  // parked at the top level, a subset view shows only the ones that were
+  // parked for it specifically.
+  const reconnectNodes: Node<ReconnectNodeData>[] = useMemo(() => {
+    const isOverview = activeTab === OVERVIEW_TAB;
+    const keys = isOverview
+      ? Object.keys(retained.positions)
+      : (retained.tabs[activeTab]?.members ?? []);
+    const posSource = isOverview ? retained.positions : (retained.tabs[activeTab]?.positions ?? {});
+    const top = 40 + Math.ceil((viewIds.length + 1) / 3) * 130 + 200;
+    return keys
+      .filter((k) => retained.meta[k]?.claudeSessionId)
+      .map((k, i) => ({
+        id: `reconnect:${k}`,
+        type: "reconnect",
+        position: posSource[k] ?? { x: 40 + (i % 3) * 260, y: top + Math.floor(i / 3) * 130 },
+        selectable: false,
+        data: { key: k, meta: retained.meta[k]! },
+      }));
+  }, [retained, activeTab, viewIds.length]);
+
   const baseNodes: Node[] = useMemo(
     () => [
       ...foreignNodes,
+      ...reconnectNodes,
       ...viewIds
         .map((id, i) => {
           const info = sessions[id]!;
@@ -196,6 +227,7 @@ function GraphInner() {
     ],
     [
       foreignNodes,
+      reconnectNodes,
       sessions,
       viewIds,
       isSubset,

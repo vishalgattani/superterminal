@@ -50,6 +50,17 @@ for (const [name, body] of rejects) {
   check(`rejected: ${name}`, status === 400 && "error" in res, JSON.stringify([status, res]).slice(0, 120));
 }
 
+const withMeta = {
+  ...good,
+  meta: { "cv-abc": { alias: "renamed", claudeSessionId: "claude-1", host: "fire", cwd: "/home/me" } },
+  links: [{ source: "cv-abc", target: "cv-def" }],
+};
+[s, r] = await call("PUT", "/api/views", withMeta);
+check("a document with alias/claudeSessionId meta and durable-key links is accepted", s === 200 && r.ok === true, JSON.stringify([s, r]));
+[s, r] = await call("GET", "/api/views");
+check("...and read back exactly, meta and links included", JSON.stringify(r.views) === JSON.stringify(withMeta), JSON.stringify(r));
+await call("PUT", "/api/views", good);
+
 [s, r] = await call("PUT", "/api/views", { version: 1, tabs: [{ id: "a", name: "n", pad: "x".repeat(600 * 1024) }] });
 check("rejected: over 512 KB, with a clear reason", s === 400 && (r.error ?? "").includes("too large"), `${s} ${String(r.error).slice(0, 80)}`);
 
