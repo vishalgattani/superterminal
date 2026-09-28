@@ -240,7 +240,9 @@ export function SessionNode({ id, data, selected }: NodeProps) {
         {d.claudeSessionId && (
           <div style={claudeIdLine} title={`Claude session ${d.claudeSessionId}`}>
             ◆ {d.claudeSessionId.slice(0, 8)}
-            {d.claudeName ? ` · ${d.claudeName}` : ""}
+            {/* A rename is viewer metadata that never reaches the running
+                Claude, so once renamed its own launch-time name is stale. */}
+            {d.named ? ` · ${d.label}` : d.claudeName ? ` · ${d.claudeName}` : ""}
           </div>
         )}
         {/* The folder is the thing you actually need to tell sessions apart. */}
