@@ -48,16 +48,21 @@ export function Agents() {
         host: s.host,
         sessionId: a.claudeSessionId,
         cwd: s.cwd,
-        name: a.claudeName,
+        name: s.alias || a.claudeName,
+        claudeName: a.claudeName,
         kind: a.kind,
         activity: a.activity,
         waitingFor: a.waitingFor,
         attachable: true,
         owned: true,
         terminalId: s.sessionId,
-      } as Orphan & { owned: true; terminalId: string };
+      } as Orphan & { owned: true; terminalId: string; claudeName?: string };
     })
-    .filter(Boolean) as (Orphan & { owned: true; terminalId: string })[];
+    .filter(Boolean) as (Orphan & {
+    owned: true;
+    terminalId: string;
+    claudeName?: string;
+  })[];
 
   const all = [...owned, ...orphans];
 
@@ -107,7 +112,11 @@ export function Agents() {
               No Claude sessions running on any host.
             </p>
           )}
-          {all.map((a) => (
+          {all.map((a) => {
+            // Claude's own title, when it differs from the alias shown above:
+            // a rename never reaches the running process, so they drift.
+            const claudeName = (a as { claudeName?: string }).claudeName;
+            return (
             <article
               key={`${a.host}:${a.sessionId}`}
               onClick={() => void readTranscript(a)}
@@ -130,6 +139,11 @@ export function Agents() {
                 {a.isViewer && <span style={selfTag}>this viewer</span>}
                 {a.kind === "background" && <span style={bgTag}>background</span>}
               </div>
+              {claudeName && claudeName !== a.name && (
+                <div style={claudeNameStyle} title={claudeName}>
+                  {claudeName}
+                </div>
+              )}
               <div style={meta} title={a.cwd}>
                 <span style={{ ...hostTag, ...hostColour(a.host) }}>{a.host}</span>
                 {short(a.cwd)}
@@ -179,7 +193,8 @@ export function Agents() {
                 )}
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -278,6 +293,14 @@ const rowTop: React.CSSProperties = { display: "flex", alignItems: "center", gap
 const dot: React.CSSProperties = { width: 7, height: 7, borderRadius: 999, flexShrink: 0 };
 const rowTitle: React.CSSProperties = {
   fontSize: 12.5,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+const claudeNameStyle: React.CSSProperties = {
+  fontSize: 10.5,
+  color: "#7a7a84",
+  fontStyle: "italic",
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
