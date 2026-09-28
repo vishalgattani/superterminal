@@ -181,7 +181,8 @@ function GraphInner() {
               // Only tmux-backed hosts can rejoin an existing remote session,
               // which is every host but local.
               canReattach: isRemoteHost(info.host),
-              model: info.model,
+              model: activity[id]?.liveModel ?? info.model,
+              effort: activity[id]?.effort,
               costUsd: activity[id]?.costUsd,
               contextPct: activity[id]?.contextPct,
               claudeName: activity[id]?.claudeName,

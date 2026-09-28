@@ -21,6 +21,10 @@ export interface SessionActivity {
   costUsd?: number;
   /** Context window used, 0-100, scraped from the statusline in the terminal. */
   contextPct?: number;
+  /** The model the running Claude reports now, scraped from the statusline. */
+  liveModel?: string;
+  /** Its effort level (low, medium, high, ...), from the same statusline. */
+  effort?: string;
   /** Claude's own session id, the one `--resume` takes. */
   claudeSessionId?: string;
 }

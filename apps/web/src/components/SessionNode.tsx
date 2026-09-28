@@ -26,8 +26,10 @@ export interface SessionNodeData extends Record<string, unknown> {
   costUsd?: number;
   /** Context window used, 0-100, when a statusline has reported one. */
   contextPct?: number;
-  /** The Claude model this terminal was started with, when one was asked for. */
+  /** The model Claude reports now, else the one the terminal was started with. */
   model?: string;
+  /** Claude's effort level, when the statusline has reported one. */
+  effort?: string;
   /** Subagents of the Claude running here, from the last transcript scan. */
   subagents?: number;
   /** When that scan ran, so the count can say how much to trust it. */
@@ -272,8 +274,13 @@ export function SessionNode({ id, data, selected }: NodeProps) {
               absent while no Claude is running here, whatever the terminal was
               started with. */}
           {modelLabel(d.model, d.claudeSessionId) && (
-            <span style={modelPill} title={`Started with --model ${d.model}`}>
+            <span style={modelPill} title={`Model: ${d.model}`}>
               {modelLabel(d.model, d.claudeSessionId)}
+            </span>
+          )}
+          {d.claudeSessionId !== undefined && d.effort && (
+            <span style={modelPill} title="Effort, from the statusline">
+              {d.effort}
             </span>
           )}
           <SubagentBadge n={d.subagents} scannedAt={d.subagentsScannedAt} />
