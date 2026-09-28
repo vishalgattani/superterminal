@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.ts",
+    "dev": "node --watch-path=src --watch-path=../../packages/shared/src src/index.ts",
     "start": "node src/index.ts",
     "typecheck": "tsc --noEmit"
   },
