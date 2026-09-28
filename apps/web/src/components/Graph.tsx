@@ -102,6 +102,7 @@ function GraphInner() {
   const createAt = useStore((s) => s.createSessionAt);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [edgeMenu, setEdgeMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   // React Flow only drags a group if the nodes are actually marked selected,
   // and it expects us to apply its select changes. Without this, Cmd+click
   // highlighted nothing and every drag moved a single node.
@@ -532,6 +533,8 @@ function GraphInner() {
       onPaneContextMenu={(e) => {
         e.preventDefault();
         const ev = e as React.MouseEvent;
+        setNodeMenu(null);
+        setEdgeMenu(null);
         setMenu({
           x: ev.clientX,
           y: ev.clientY,
@@ -546,10 +549,12 @@ function GraphInner() {
       onPaneClick={() => {
         setMenu(null);
         setNodeMenu(null);
+        setEdgeMenu(null);
       }}
       onMoveStart={() => {
         setMenu(null);
         setNodeMenu(null);
+        setEdgeMenu(null);
       }}
       onNodeContextMenu={(e, node) => {
         e.preventDefault();
@@ -558,7 +563,17 @@ function GraphInner() {
         if (node.type !== "session") return;
         const ev = e as React.MouseEvent;
         setMenu(null);
+        setEdgeMenu(null);
         setNodeMenu({ x: ev.clientX, y: ev.clientY, id: node.id });
+      }}
+      // deleteKeyCode is off so a stray Backspace cannot close a terminal,
+      // which also leaves no keyboard way to delete a link: this menu is it.
+      onEdgeContextMenu={(e, edge) => {
+        e.preventDefault();
+        if (edge.id.startsWith("contain:")) return;
+        setMenu(null);
+        setNodeMenu(null);
+        setEdgeMenu({ x: e.clientX, y: e.clientY, id: edge.id });
       }}
       colorMode="dark"
       style={{ background: "#0e0e11" }}
@@ -673,6 +688,35 @@ function GraphInner() {
           }}
         >
           Close session…
+        </button>
+      </div>
+      </>
+    )}
+
+    {edgeMenu && (
+      <>
+      <div
+        style={backdrop}
+        onMouseDown={() => setEdgeMenu(null)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setEdgeMenu(null);
+        }}
+      />
+      <div
+        style={{ ...menuBox, left: edgeMenu.x, top: edgeMenu.y }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div style={menuTitle}>Context link</div>
+        <button
+          style={{ ...menuItem, color: "#e08a8a" }}
+          onClick={() => {
+            const id = edgeMenu.id;
+            setEdgeMenu(null);
+            void removeLink(id);
+          }}
+        >
+          Disconnect
         </button>
       </div>
       </>
