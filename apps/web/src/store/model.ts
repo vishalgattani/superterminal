@@ -317,6 +317,12 @@ export interface TabsSlice {
   /** Notes on the active view, for saving into a preset. */
   activeNotes: () => Omit<CanvasNote, "id">[];
   addNote: (x: number, y: number) => void;
+  /**
+   * Send sessions to another view, or to a new one when target is null. They
+   * leave the view they are in, unless that is the overview, which always
+   * shows everything. Never touches the sessions themselves.
+   */
+  moveToView: (ids: string[], target: string | null) => void;
   updateNote: (id: string, patch: Partial<Omit<CanvasNote, "id">>) => void;
   removeNote: (id: string) => void;
   /**
