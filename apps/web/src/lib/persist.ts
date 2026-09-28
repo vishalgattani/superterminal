@@ -1,5 +1,5 @@
 import type { SessionInfo } from "@cv/shared";
-import type { GraphTab, NodeGroup, NodePosition } from "../store/model.ts";
+import type { CanvasNote, GraphTab, NodeGroup, NodePosition } from "../store/model.ts";
 
 /**
  * Saved views, and how they survive a reload and a restart.
@@ -23,6 +23,8 @@ export interface PersistedTab {
   members?: string[];
   positions: Record<string, NodePosition>;
   groups?: { id: string; name: string; hue: number; members: string[] }[];
+  /** Notes hold no session, so they need no key: saved exactly as they are. */
+  notes?: CanvasNote[];
 }
 
 export interface PersistedViews {
@@ -116,6 +118,7 @@ export function serializeViews(input: {
         ...(members ? { members } : {}),
         positions: keyPositions(t.positions, keep?.positions ?? {}),
         ...(groups && groups.length ? { groups } : {}),
+        ...(t.notes?.length ? { notes: t.notes } : {}),
       };
     }),
   };
@@ -197,12 +200,22 @@ export function hydrateViews(
         }
       }
     }
+    const notes: CanvasNote[] = [];
+    if (Array.isArray(raw.notes)) {
+      for (const n of raw.notes) {
+        if (!isObj(n) || typeof n.id !== "string" || typeof n.text !== "string") continue;
+        const [x, y, w, h] = [n.x, n.y, n.w, n.h];
+        if (![x, y, w, h].every((v) => typeof v === "number" && Number.isFinite(v))) continue;
+        notes.push({ id: n.id, text: n.text, x: x as number, y: y as number, w: w as number, h: h as number });
+      }
+    }
     tabs.push({
       id: raw.id,
       name: raw.name,
       positions: positionsOf(raw.positions, park.positions),
       ...(members ? { members } : {}),
       ...(groups.length ? { groups } : {}),
+      ...(notes.length ? { notes } : {}),
     });
     if (park.members.length || Object.keys(park.positions).length) {
       retained.tabs[raw.id] = { members: park.members, positions: park.positions };

@@ -41,12 +41,40 @@ export interface PresetGroup {
   members: number[];
 }
 
+/**
+ * A markdown note on the canvas. Decoration only: it holds no session, so it
+ * spawns nothing on deploy and can never be the end of a context link.
+ */
+export interface PresetNote {
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const MAX_NOTES = 50;
+const MAX_NOTE_CHARS = 20_000;
+
+/** Keep only well-formed notes, so a client or a hand-edited file cannot store nonsense. */
+export function cleanNotes(raw: unknown): PresetNote[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PresetNote[] = [];
+  for (const n of raw.slice(0, MAX_NOTES) as Record<string, unknown>[]) {
+    const [x, y, w, h] = [n?.x, n?.y, n?.w, n?.h].map(Number);
+    if (typeof n?.text !== "string" || ![x, y, w, h].every(Number.isFinite)) continue;
+    out.push({ text: n.text.slice(0, MAX_NOTE_CHARS), x: x!, y: y!, w: w!, h: h! });
+  }
+  return out;
+}
+
 export interface Preset {
   name: string;
   description?: string;
   nodes: PresetNode[];
   edges: PresetEdge[];
   groups?: PresetGroup[];
+  notes?: PresetNote[];
   builtIn?: boolean;
   savedAt?: number;
 }

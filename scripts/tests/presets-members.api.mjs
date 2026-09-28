@@ -48,6 +48,20 @@ check("only unknown ids cannot be saved either", s === 400, JSON.stringify([s, r
 [s, r] = await call("POST", "/api/presets/sub/deploy");
 check("deploy returns the spawned session ids", s === 200 && r.sessions.length === 2 && r.wired === 1, JSON.stringify(r));
 
+// notes are saved with a preset, cleaned, and handed back on deploy (#18)
+[s] = await call("POST", "/api/presets", {
+  name: "noted",
+  members: [a],
+  notes: [{ text: "# hi", x: 1, y: 2, w: 200, h: 100 }, { text: 7 }, { text: "no size" }],
+});
+p = await preset("noted");
+check("a preset keeps its well-formed notes only", s === 200 && p.notes?.length === 1 && p.notes[0].text === "# hi", JSON.stringify(p.notes));
+let dep;
+[s, dep] = await call("POST", "/api/presets/noted/deploy");
+check("deploy hands the notes back", s === 200 && dep.notes?.[0]?.w === 200, JSON.stringify(dep.notes));
+await call("DELETE", "/api/presets/noted");
+for (const id of dep.sessions ?? []) await call("DELETE", `/api/sessions/${id}`);
+
 // leave the rig as we found it, so test files do not depend on each other
 for (const name of ["all", "sub", "ord", "ghost"]) await call("DELETE", `/api/presets/${name}`);
 for (const id of [...ids, ...(r.sessions ?? [])]) await call("DELETE", `/api/sessions/${id}`);

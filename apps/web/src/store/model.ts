@@ -99,6 +99,22 @@ export interface NodeGroup {
   hue: number;
 }
 
+/**
+ * A markdown note on the canvas. Decoration only (issue #18, ADR 0006): it is
+ * not a session, so it has no terminal, no context handles and no capability.
+ * It carries its own position and size, and belongs to one view.
+ */
+export interface CanvasNote {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const NOTE_PREFIX = "note:";
+
 export interface GraphTab {
   id: string;
   name: string;
@@ -113,6 +129,7 @@ export interface GraphTab {
    * saved as a preset.
    */
   members?: string[];
+  notes?: CanvasNote[];
 }
 
 let idSeq = 0;
@@ -297,6 +314,11 @@ export interface TabsSlice {
   activeMembers: () => string[];
   /** Frames on the active view, for saving into a preset. */
   activeGroups: () => { name: string; hue: number; members: string[] }[];
+  /** Notes on the active view, for saving into a preset. */
+  activeNotes: () => Omit<CanvasNote, "id">[];
+  addNote: (x: number, y: number) => void;
+  updateNote: (id: string, patch: Partial<Omit<CanvasNote, "id">>) => void;
+  removeNote: (id: string) => void;
   /**
    * Open a new view holding exactly the sessions a deploy just spawned, with
    * the preset's frames around them.
@@ -305,6 +327,7 @@ export interface TabsSlice {
     tabName: string,
     sessions: string[],
     groups: { name: string; hue: number; members: string[] }[],
+    notes?: Omit<CanvasNote, "id">[],
   ) => void;
   renameGroup: (id: string, name: string) => void;
   ungroup: (id: string) => void;

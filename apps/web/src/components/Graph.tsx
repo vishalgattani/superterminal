@@ -20,10 +20,12 @@ import { AddToView } from "./AddToView.tsx";
 import { FolderNode, type FolderNodeData } from "./FolderNode.tsx";
 import { ForeignNode, type ForeignNodeData } from "./ForeignNode.tsx";
 import { GroupFrames } from "./GroupFrames.tsx";
+import { NoteNode } from "./NoteNode.tsx";
 import { SaveGraph } from "./SaveGraph.tsx";
 import { SessionNode, type SessionNodeData } from "./SessionNode.tsx";
 import { buildFolderTree } from "../lib/folders.ts";
 import { externalOrphans, foreignId, useStore, viewSessionIds } from "../store.ts";
+import { NOTE_PREFIX } from "../store/model.ts";
 import { hostPalette } from "../lib/hostColour.ts";
 import { isRemoteHost } from "@cv/shared";
 import { canvasEnd } from "../lib/edgeEnds.ts";
@@ -33,7 +35,7 @@ const EMPTY_COUNTS: Record<string, number> = {};
 
 // Registered once at module level: inlining this remounts every node on each
 // render.
-const nodeTypes = { session: SessionNode, foreign: ForeignNode, folder: FolderNode };
+const nodeTypes = { session: SessionNode, foreign: ForeignNode, folder: FolderNode, note: NoteNode };
 
 /** Last path segment, or "~" for a home directory. */
 function folderName(cwd: string): string {
@@ -101,6 +103,11 @@ function GraphInner() {
   // and it expects us to apply its select changes. Without this, Cmd+click
   // highlighted nothing and every drag moved a single node.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Kept apart from selectedIds: a note is not a session, so it must never be
+  // swept into a frame or a preset's member list.
+  const [selectedNote, setSelectedNote] = useState<string | null>(null);
+  const addNote = useStore((s) => s.addNote);
+  const updateNote = useStore((s) => s.updateNote);
   const groupNodes = useStore((s) => s.groupNodes);
   const groups = tabs.find((t) => t.id === activeTab)?.groups ?? [];
   const forkSession = useStore((s) => s.forkSession);
@@ -264,7 +271,24 @@ function GraphInner() {
     }));
   }, [tree, baseNodes, tabPositions, treeFlow]);
 
-  const nodes: Node[] = useMemo(() => [...folderNodes, ...baseNodes], [folderNodes, baseNodes]);
+  const noteNodes: Node[] = useMemo(
+    () =>
+      (activeTabObj?.notes ?? []).map((n) => ({
+        id: n.id,
+        type: "note",
+        position: { x: n.x, y: n.y },
+        width: n.w,
+        height: n.h,
+        selected: selectedNote === n.id,
+        data: { text: n.text },
+      })),
+    [activeTabObj?.notes, selectedNote],
+  );
+
+  const nodes: Node[] = useMemo(
+    () => [...noteNodes, ...folderNodes, ...baseNodes],
+    [noteNodes, folderNodes, baseNodes],
+  );
 
   // Turning the tree on puts folders above the sessions, usually off the top of
   // the screen, so bring everything into view. Only on the toggle: not on every
@@ -376,6 +400,15 @@ function GraphInner() {
     (changes: NodeChange[]) => {
       let nextSelection: Set<string> | undefined;
       for (const c of changes) {
+        if ("id" in c && c.id.startsWith(NOTE_PREFIX)) {
+          if (c.type === "position" && c.position) updateNote(c.id, c.position);
+          // Only a resize the owner made; React Flow's own measuring reports
+          // dimensions too, and must not overwrite the saved size.
+          else if (c.type === "dimensions" && c.resizing && c.dimensions) {
+            updateNote(c.id, { w: c.dimensions.width, h: c.dimensions.height });
+          } else if (c.type === "select") setSelectedNote(c.selected ? c.id : null);
+          continue;
+        }
         if (c.type === "position" && c.position) {
           // Fires for every node in a multi-node drag, so the whole
           // selection moves together.
@@ -388,7 +421,7 @@ function GraphInner() {
       }
       if (nextSelection) setSelectedIds(nextSelection);
     },
-    [setPosition, selectedIds],
+    [setPosition, selectedIds, updateNote],
   );
 
   // Click a node to open its terminal; click the open one again to collapse.
@@ -563,6 +596,7 @@ function GraphInner() {
         nodeColor={(n) => {
           // External cards carry their host inside the orphan record.
           if (n.type === "folder") return "#4a5468";
+          if (n.type === "note") return "#5a5538";
           const host =
             n.type === "foreign"
               ? (n.data as ForeignNodeData).orphan.host
@@ -715,6 +749,16 @@ function GraphInner() {
             {h.label}
           </button>
         ))}
+        <div style={menuTitle}>Annotate</div>
+        <button
+          style={menuItem}
+          onClick={() => {
+            setMenu(null);
+            addNote(menu.flowX, menu.flowY);
+          }}
+        >
+          Add note
+        </button>
       </div>
       </>
     )}
