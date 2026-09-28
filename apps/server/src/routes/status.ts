@@ -5,7 +5,7 @@ import type { AppContext } from "../context.ts";
 
 /** Health, hosts, live status and the instance light. */
 export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): void {
-  const { config, hosts, hostStatuses, ptys, agents, fireInstance, transcripts, costs, contexts, links, OWN_PIDS } = ctx;
+  const { config, hosts, hostStatuses, ptys, agents, fireInstance, transcripts, costs, contexts, models, links, OWN_PIDS } = ctx;
 
   app.get("/api/health", async () => ({
     ok: true,
@@ -36,8 +36,17 @@ export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): voi
         shellPid: bareLocal ? ptys.get(info.sessionId)?.proc.pid : undefined,
         parents: bareLocal ? host?.parents : undefined,
       });
+      // Statusline readings belong to the Claude that printed them. Once it
+      // exits back to the shell they are stale, and a cost left on a bare
+      // terminal reads as a session still running up a bill.
+      if (!row) {
+        costs.forget(info.sessionId);
+        contexts.forget(info.sessionId);
+        models.forget(info.sessionId);
+      }
       const cost = costs.get(info.sessionId);
       const context = contexts.get(info.sessionId);
+      const modelEffort = models.get(info.sessionId);
       return {
         sessionId: info.sessionId,
         // Where the terminal is working now, kept current by the cwd tracker.
@@ -49,6 +58,8 @@ export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): voi
         kind: row?.kind,
         costUsd: cost?.sessionUsd,
         contextPct: context?.pct,
+        liveModel: modelEffort?.model,
+        effort: modelEffort?.effort,
         // Claude's own session id for this terminal, when a Claude is running
         // in it. Distinct from our terminal id: this is the one `--resume`
         // takes and the one another session can be pointed at.
