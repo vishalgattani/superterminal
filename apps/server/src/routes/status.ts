@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { LOCAL_HOST_ID } from "@cv/shared";
-import { activityOf, tally } from "../status/agents.ts";
+import { activityOf, matchRow, tally } from "../status/agents.ts";
 import type { AppContext } from "../context.ts";
 
 /** Health, hosts, live status and the instance light. */
@@ -21,22 +21,21 @@ export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): voi
   /**
    * Live status: the instance light plus per-session activity.
    *
-   * Sessions are matched to `claude agents --json` rows by cwd on the same
-   * host. A terminal with no Claude running simply has no row, which is
+   * Sessions are matched to `claude agents --json` rows on the same host (see
+   * matchRow). A terminal with no Claude running simply has no row, which is
    * reported as "shell" rather than guessed at.
    */
   app.get("/api/status", async () => {
     const byHost = new Map(agents.all().map((a) => [a.host, a]));
     const sessions = ptys.list().map((info) => {
-      const rows = byHost.get(info.host)?.rows ?? [];
-      // Join on the tmux session name, which is derived from this terminal's id.
-      // Matching on cwd alone was wrong whenever two terminals shared a folder:
-      // both showed the same Claude session id and cost. cwd is only a fallback
-      // for hosts without tmux, and then only when it is unambiguous.
-      const tmuxName = info.tmuxSession ?? `cv-${info.sessionId.slice(0, 8)}`;
-      const byTmux = rows.find((r) => r.tmuxSession === tmuxName);
-      const sameCwd = rows.filter((r) => r.cwd === info.cwd && !r.tmuxSession);
-      const row = byTmux ?? (sameCwd.length === 1 ? sameCwd[0] : undefined);
+      const host = byHost.get(info.host);
+      const bareLocal = info.host === LOCAL_HOST_ID && !info.tmuxSession;
+      const row = matchRow(host?.rows ?? [], {
+        tmuxName: info.tmuxSession ?? `cv-${info.sessionId.slice(0, 8)}`,
+        cwd: info.cwd,
+        shellPid: bareLocal ? ptys.get(info.sessionId)?.proc.pid : undefined,
+        parents: bareLocal ? host?.parents : undefined,
+      });
       const cost = costs.get(info.sessionId);
       const context = contexts.get(info.sessionId);
       return {
