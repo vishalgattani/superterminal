@@ -120,6 +120,7 @@ function GraphInner() {
   const forkSession = useStore((s) => s.forkSession);
   const askClose = useStore((s) => s.askClose);
   const startRename = useStore((s) => s.startRename);
+  const moveToView = useStore((s) => s.moveToView);
   const toggleOpenFn = useStore((s) => s.toggleOpen);
   const { screenToFlowPosition, fitView } = useReactFlow();
   const orphans = useStore((s) => s.orphans);
@@ -699,6 +700,33 @@ function GraphInner() {
           }}
         >
           Fork session
+        </button>
+        <div style={menuTitle}>Move to view</div>
+        {tabs
+          // The overview shows every session already, so it is never a target.
+          .filter((t) => t.id !== activeTab && t.members)
+          .map((t) => (
+            <button
+              key={t.id}
+              style={menuItem}
+              onClick={() => {
+                const id = nodeMenu.id;
+                setNodeMenu(null);
+                moveToView([id], t.id);
+              }}
+            >
+              {t.name}
+            </button>
+          ))}
+        <button
+          style={menuItem}
+          onClick={() => {
+            const id = nodeMenu.id;
+            setNodeMenu(null);
+            moveToView([id], null);
+          }}
+        >
+          New view
         </button>
         {/* Leaving a view is not closing a session: this only stops showing it
             here, and it stays on the overview and in every other view. */}

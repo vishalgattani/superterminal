@@ -410,6 +410,34 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
     return (s.tabs.find((t) => t.id === s.activeTab)?.notes ?? []).map(({ id: _, ...n }) => n);
   },
 
+  moveToView: (ids, target) =>
+    set((s) => {
+      const newId = target ?? uid("t");
+      const tabs = target
+        ? s.tabs
+        : [...s.tabs, { id: newId, name: `view ${s.tabs.length + 1}`, positions: {}, members: [] }];
+      const gone = new Set(ids);
+      return {
+        tabs: tabs.map((t) => {
+          if (t.id === newId && t.members) {
+            const have = new Set(t.members);
+            return { ...t, members: [...t.members, ...ids.filter((id) => s.sessions[id] && !have.has(id))] };
+          }
+          if (t.id === s.activeTab && t.members && t.id !== newId) {
+            return {
+              ...t,
+              members: t.members.filter((m) => !gone.has(m)),
+              groups: t.groups
+                ?.map((g) => ({ ...g, members: g.members.filter((m) => !gone.has(m)) }))
+                .filter((g) => g.members.length > 0),
+            };
+          }
+          return t;
+        }),
+        ...(target ? {} : { activeTab: newId }),
+      };
+    }),
+
   addNote: (x, y) =>
     set((s) => ({
       tabs: s.tabs.map((t) =>
