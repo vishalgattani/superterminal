@@ -13,7 +13,7 @@
 
 /** A known model family, then ` · ` and an effort level, between `|`s. */
 const MODEL_EFFORT =
-  /\|\s*((?:Opus|Sonnet|Haiku|Fable)\b[^|·]*?)\s*·\s*(low|medium|high|xhigh|max)\s*(?=\|)/gi;
+  /[|│]\s*((?:Opus|Sonnet|Haiku|Fable)\b[^|│·]*?)\s*·\s*(low|medium|high|xhigh|max|ultracode)\s*(?=[|│])/gi;
 
 export function parseModelEffort(text: string): { model: string; effort: string } | undefined {
   let last: RegExpExecArray | undefined;

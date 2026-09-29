@@ -13,6 +13,9 @@ check("model and effort are read from the statusline", got?.model === "Sonnet 5"
 got = parseModelEffort("a | Opus 5.5 (1M context) · xhigh | C12 |");
 check("a model name with detail keeps it", got?.model === "Opus 5.5 (1M context)" && got?.effort === "xhigh", JSON.stringify(got));
 
+got = parseModelEffort("my-brain-in-logseq ⎇ main ↑2 │ Opus 5.5 · low │ C11 █░░░░░");
+check("box-drawing │ separators are read too", got?.model === "Opus 5.5" && got?.effort === "low", JSON.stringify(got));
+
 check("text with no such segment reads nothing", parseModelEffort("$ ls | grep medium") === undefined);
 check("an unknown effort word is not taken", parseModelEffort("| Sonnet 5 · spicy |") === undefined);
 
