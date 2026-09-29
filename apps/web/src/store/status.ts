@@ -4,6 +4,8 @@ import type { SessionActivity, State, StatusSlice } from "./model.ts";
 
 /** Live status from polling, and actions on sessions the viewer does not own. */
 export const createStatusSlice: StateCreator<State, [], [], StatusSlice> = (set, get) => ({
+  monitors: [],
+  setMonitors: (monitors) => set({ monitors }),
   activity: {},
   instance: undefined,
   startingInstance: false,

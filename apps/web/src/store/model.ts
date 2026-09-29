@@ -92,7 +92,21 @@ export function externalOrphans(
   return (orphans ?? []).filter((o) => !(o.tmuxSession && ours.has(o.tmuxSession)));
 }
 
-export type ViewMode = "graph" | "kanban" | "history" | "agents";
+export type ViewMode = "graph" | "kanban" | "monitors" | "history" | "agents";
+
+/** A Monitor a Claude session set up, as /api/monitors reports it. */
+export interface MonitorInfo {
+  taskId: string;
+  claudeSessionId: string;
+  cwd?: string;
+  description: string;
+  startedAt: number;
+  expiresAt?: number;
+  endedAt?: number;
+  lastEvent?: string;
+  lastEventAt?: number;
+  running: boolean;
+}
 
 export interface NodeGroup {
   id: string;
@@ -375,7 +389,15 @@ export interface StatusSlice {
    * Keyed by Claude's session id, so it covers our terminals and the sessions
    * we did not start alike.
    */
-  subagents?: { counts: Record<string, number>; fetchedAt: number };
+  subagents?: {
+    counts: Record<string, number>;
+    /** Of those, how many are still running (transcript written in the last 2 min). */
+    active?: Record<string, number>;
+    fetchedAt: number;
+  };
+  /** Monitors from recent transcripts, newest first; polled from /api/monitors. */
+  monitors: MonitorInfo[];
+  setMonitors: (m: MonitorInfo[]) => void;
   /** `at` is where the card being replaced sits, so the terminal takes its place. */
   attachAgent: (a: Orphan, at?: NodePosition) => Promise<void>;
   stopAgent: (a: Orphan) => Promise<void>;
@@ -394,7 +416,12 @@ export interface StatusSlice {
     terminals?: SessionInfo[];
     links?: State["links"];
     orphans?: Orphan[];
-    subagents?: { counts: Record<string, number>; fetchedAt: number };
+    subagents?: {
+    counts: Record<string, number>;
+    /** Of those, how many are still running (transcript written in the last 2 min). */
+    active?: Record<string, number>;
+    fetchedAt: number;
+  };
   }) => void;
   startInstance: () => Promise<void>;
   totals?: {
