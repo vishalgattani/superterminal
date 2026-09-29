@@ -37,6 +37,8 @@ export function HostSettings({ onClose }: { onClose: () => void }) {
   const [keyPath, setKeyPath] = useState("");
   const [claudePath, setClaudePath] = useState("");
   const [claudeModel, setClaudeModel] = useState("");
+  const [keyType, setKeyType] = useState<"ed25519" | "rsa">("ed25519");
+  const [publicKey, setPublicKey] = useState<string | null>(null);
 
   const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
@@ -66,6 +68,7 @@ export function HostSettings({ onClose }: { onClose: () => void }) {
     setKeyPath("");
     setClaudePath("");
     setClaudeModel("");
+    setPublicKey(null);
     setOpen(false);
   };
 
@@ -89,6 +92,26 @@ export function HostSettings({ onClose }: { onClose: () => void }) {
       if (!res.ok) throw new Error(body.error ?? res.statusText);
       reset();
       await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const generateKey = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/ssh/keygen", {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({ name: `superterminal_${id.trim()}`, type: keyType }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? res.statusText);
+      setKeyPath(body.keyPath);
+      setPublicKey(body.publicKey);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -189,12 +212,53 @@ export function HostSettings({ onClose }: { onClose: () => void }) {
               value={sshTarget}
               onChange={(e) => setSshTarget(e.target.value)}
             />
-            <input
-              style={input}
-              placeholder="SSH key path (optional — falls back to ssh-agent / ~/.ssh/config)"
-              value={keyPath}
-              onChange={(e) => setKeyPath(e.target.value)}
-            />
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                style={{ ...input, flex: 1 }}
+                placeholder="SSH key path (optional — falls back to ssh-agent / ~/.ssh/config)"
+                value={keyPath}
+                onChange={(e) => setKeyPath(e.target.value)}
+              />
+              <select
+                style={input}
+                value={keyType}
+                onChange={(e) => setKeyType(e.target.value as "ed25519" | "rsa")}
+              >
+                <option value="ed25519">ed25519</option>
+                <option value="rsa">RSA 4096</option>
+              </select>
+              <button
+                style={btnSmall}
+                disabled={busy || !id.trim()}
+                title={
+                  id.trim()
+                    ? `Create ~/.ssh/superterminal_${id.trim()} and use it for this host`
+                    : "Enter a tag first; the key is named after it"
+                }
+                onClick={() => void generateKey()}
+              >
+                Generate key
+              </button>
+            </div>
+            {publicKey && (
+              <div style={{ display: "grid", gap: 4 }}>
+                <div style={{ fontSize: 11, color: "#8a8a93" }}>
+                  Add this public key to ~/.ssh/authorized_keys on the host:
+                </div>
+                <textarea
+                  style={{ ...input, fontFamily: "monospace", height: 56, resize: "none" }}
+                  readOnly
+                  value={publicKey}
+                  onFocus={(e) => e.target.select()}
+                />
+                <button
+                  style={{ ...btnSmall, justifySelf: "start" }}
+                  onClick={() => void navigator.clipboard.writeText(publicKey)}
+                >
+                  Copy public key
+                </button>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 6 }}>
               <input
                 style={{ ...input, flex: 1 }}
