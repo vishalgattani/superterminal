@@ -5,6 +5,27 @@ function shellQuote(s: string): string {
   return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
+/**
+ * The environment without a parent Claude Code session's markers. When the
+ * server is started from inside Claude Code (its Bash tool, the desktop app's
+ * preview), CLAUDECODE and CLAUDE_CODE_* reach every terminal, and a claude run
+ * there takes itself for a child session: no transcript, no `claude agents`
+ * row, so the node never learns its session id, model or cost.
+ */
+function withoutParentClaude(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([k]) =>
+        k !== "CLAUDECODE" &&
+        k !== "CLAUDE_PID" &&
+        k !== "CLAUDE_EFFORT" &&
+        !k.startsWith("CLAUDE_CODE_") &&
+        !k.startsWith("CLAUDE_AGENT_SDK_") &&
+        !k.startsWith("CLAUDE_PREVIEW_"),
+    ),
+  );
+}
+
 export class LocalHost implements Host {
   readonly id = "local" as const;
   // Written as an explicit field rather than a constructor parameter property:
@@ -17,7 +38,7 @@ export class LocalHost implements Host {
 
   plan(req: SpawnRequest): SpawnPlan {
     const env: NodeJS.ProcessEnv = {
-      ...process.env,
+      ...withoutParentClaude(process.env),
       // xterm.js with the WebGL renderer handles 256 colour and true colour.
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
