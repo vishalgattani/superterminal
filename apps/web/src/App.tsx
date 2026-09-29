@@ -30,6 +30,8 @@ export default function App() {
     s.showForeign ? externalOrphans(s.orphans, s.sessions).length : 0,
   );
   const openSessionId = useStore((s) => s.openSessionId);
+  const [paneVw, setPaneVw] = useState(readPaneVw);
+  const [dragging, setDragging] = useState(false);
   const exited = useStore((s) => s.exited);
   const setHosts = useStore((s) => s.setHosts);
   const addSession = useStore((s) => s.addSession);
@@ -368,10 +370,36 @@ export default function App() {
             // A share of the window, not a share capped at 900px: the cap left
             // a large screen with a terminal the same size as a laptop's and
             // the rest given to the graph. The terminal refits as this moves.
-            width: open ? "60vw" : 0,
+            width: open ? `${paneVw}vw` : 0,
             borderLeftWidth: open ? 1 : 0,
+            position: "relative",
+            // Animating width while dragging makes the pane lag the pointer.
+            transition: dragging ? "none" : styles.panel!.transition,
           }}
         >
+          {open && (
+            <div
+              style={styles.paneHandle}
+              title="Drag to resize · double-click to reset"
+              onDoubleClick={() => {
+                setPaneVw(DEFAULT_PANE_VW);
+                savePaneVw(DEFAULT_PANE_VW);
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                setDragging(true);
+              }}
+              onPointerMove={(e) => {
+                if (!dragging) return;
+                setPaneVw(clampPaneVw(((window.innerWidth - e.clientX) / window.innerWidth) * 100));
+              }}
+              onPointerUp={() => {
+                setDragging(false);
+                savePaneVw(paneVw);
+              }}
+            />
+          )}
           {open && (
             <div style={styles.panelHead}>
               <strong style={{ fontSize: 12.5 }}>
@@ -459,6 +487,15 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
     background: "#111113",
   },
+  paneHandle: {
+    position: "absolute",
+    left: -3,
+    top: 0,
+    bottom: 0,
+    width: 7,
+    cursor: "col-resize",
+    zIndex: 5,
+  },
   panelHead: {
     display: "flex",
     alignItems: "center",
@@ -522,3 +559,29 @@ const styles: Record<string, React.CSSProperties> = {
   note: { padding: "6px 12px", color: "#8a8a93", fontSize: 12 },
   warn: { padding: "8px 12px", color: "#e0a33e" },
 };
+
+const DEFAULT_PANE_VW = 60;
+const PANE_VW_KEY = "cv-pane-vw";
+
+function clampPaneVw(vw: number): number {
+  return Math.min(85, Math.max(20, vw));
+}
+
+// Per-viewer layout preference; storage can be unavailable (private window),
+// in which case the default is fine.
+function readPaneVw(): number {
+  try {
+    const v = Number(localStorage.getItem(PANE_VW_KEY));
+    return v ? clampPaneVw(v) : DEFAULT_PANE_VW;
+  } catch {
+    return DEFAULT_PANE_VW;
+  }
+}
+
+function savePaneVw(vw: number): void {
+  try {
+    localStorage.setItem(PANE_VW_KEY, String(Math.round(vw)));
+  } catch {
+    // Not remembered; nothing else depends on it.
+  }
+}
