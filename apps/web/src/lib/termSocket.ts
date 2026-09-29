@@ -164,6 +164,26 @@ export function openTerminal(opts: {
     return el.isConnected && el.clientWidth >= 80 && el.clientHeight >= 40;
   };
 
+  // A fresh page has none of what the pty drew before it attached, and the
+  // backlog only holds output from while no page was attached, so a running
+  // TUI's incremental redraws land on a blank screen and garble it. The pty is
+  // usually the size we ask for already, which delivers no SIGWINCH, so on the
+  // first fit after connecting nudge it a row shorter and back: the TUI
+  // repaints everything. Not at open: a hidden pane cannot be measured then.
+  // Sent around the resize sender, whose dedupe exists to prevent this redraw.
+  let repaintPending = true;
+  const repaint = () => {
+    repaintPending = false;
+    const { cols, rows } = term;
+    if (rows < 2) return;
+    send(frame(C2S.RESIZE, encodeJson({ cols, rows: rows - 1 })));
+    setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN && term.cols === cols && term.rows === rows) {
+        send(frame(C2S.RESIZE, encodeJson({ cols, rows })));
+      }
+    }, 80);
+  };
+
   const fit = () => {
     if (!measurable()) return;
     try {
@@ -172,6 +192,7 @@ export function openTerminal(opts: {
       return; // container not measurable yet
     }
     sendResize(term.cols, term.rows);
+    if (repaintPending && ws.readyState === WebSocket.OPEN) repaint();
   };
 
   ws.onopen = () => fit();
