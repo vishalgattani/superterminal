@@ -68,7 +68,8 @@ export function registerHostsRoutes(app: FastifyInstance, ctx: AppContext): void
     if (type !== "ed25519" && type !== "rsa") {
       return reply.code(400).send({ error: "type must be ed25519 or rsa" });
     }
-    const dir = join(homedir(), ".ssh");
+    // CV_SSH_DIR only so the API tests can keep their keys out of ~/.ssh.
+    const dir = process.env.CV_SSH_DIR ?? join(homedir(), ".ssh");
     const keyPath = join(dir, name);
     if (existsSync(keyPath)) return reply.code(409).send({ error: `${keyPath} already exists` });
     mkdirSync(dir, { recursive: true, mode: 0o700 });
