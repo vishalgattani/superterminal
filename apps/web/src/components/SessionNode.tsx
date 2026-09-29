@@ -128,11 +128,11 @@ export function SessionNode({ id, data, selected }: NodeProps) {
       style={{
         position: "relative",
         // Sized to its content rather than a fixed 210px, which truncated
-        // longer names like generator-system-simulation. Bounded so one long
-        // label cannot stretch a node across the canvas.
+        // longer names like generator-system-simulation. Unbounded so the tag
+        // row never squeezes its pills; the text lines carry their own caps
+        // so one long label cannot stretch a node across the canvas.
         width: "max-content",
         minWidth: 210,
-        maxWidth: 340,
         borderRadius: 10,
         border: `1px solid ${d.open ? "#5b8cff" : selected ? "#44444f" : "#2a2a32"}`,
         background: "#15151a",
@@ -192,6 +192,7 @@ export function SessionNode({ id, data, selected }: NodeProps) {
                 // The node grows to fit, so the title only clips at the
                 // maximum width rather than at a fixed one.
                 minWidth: 0,
+                maxWidth: 300,
                 cursor: "text",
                 color: d.named ? "#e6e6e6" : "#b9b9c2",
               }}
@@ -254,6 +255,8 @@ export function SessionNode({ id, data, selected }: NodeProps) {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span
             style={{
+              flexShrink: 0,
+              whiteSpace: "nowrap",
               fontSize: 10,
               padding: "1px 6px",
               borderRadius: 999,
@@ -264,7 +267,14 @@ export function SessionNode({ id, data, selected }: NodeProps) {
           >
             {d.host}
           </span>
-          <span style={{ fontSize: 10.5, color: d.exited ? "#e0a33e" : "#6a6a73" }}>
+          <span
+            style={{
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+              fontSize: 10.5,
+              color: d.exited ? "#e0a33e" : "#6a6a73",
+            }}
+          >
             {d.exited
               ? d.canReattach
                 ? "disconnected"
@@ -401,6 +411,8 @@ const handle: React.CSSProperties = {
 };
 
 const costPill: React.CSSProperties = {
+  flexShrink: 0,
+  whiteSpace: "nowrap",
   marginLeft: "auto",
   fontSize: 10,
   padding: "1px 6px",
@@ -505,6 +517,7 @@ const renameInput: React.CSSProperties = {
 };
 
 const claudeIdLine: React.CSSProperties = {
+  maxWidth: 320,
   fontSize: 10,
   color: "#8fc0f0",
   whiteSpace: "nowrap",
@@ -514,6 +527,7 @@ const claudeIdLine: React.CSSProperties = {
 };
 
 const pathLine: React.CSSProperties = {
+  maxWidth: 320,
   fontSize: 11,
   color: "#9a9aa3",
   whiteSpace: "nowrap",
@@ -547,6 +561,8 @@ const hint: React.CSSProperties = {
 };
 
 const modelPill: React.CSSProperties = {
+  flexShrink: 0,
+  whiteSpace: "nowrap",
   fontSize: 10,
   padding: "1px 6px",
   borderRadius: 999,
