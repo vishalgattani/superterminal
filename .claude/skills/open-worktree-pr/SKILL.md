@@ -19,7 +19,7 @@ only through a pull request whose `build` check is green.
    git fetch origin
    git worktree add ../csv-<slug> -b <type>/<slug> main
    cd ../csv-<slug>
-   cp -Rc ../superterminal/node_modules node_modules   # APFS clone; or npm ci
+   npm ci   # never cp -Rc from the main checkout: it restarts the running viewer (#59)
    ```
 
    `<type>` is one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.

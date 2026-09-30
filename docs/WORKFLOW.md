@@ -24,8 +24,15 @@ fetch  →  worktree  →  change + test  →  rebase  →  npm run gate  →  m
 git fetch origin
 git worktree add ../csv-<slug> -b <type>/<slug> origin/main
 cd ../csv-<slug>
-cp -Rc ../superterminal/node_modules node_modules   # APFS clone; or `npm ci`
+npm ci
 ```
+
+- **Install with `npm ci`, never `cp -Rc ../superterminal/node_modules`.** An
+  APFS clone makes macOS report a change on the *source* files, and the dev
+  server's `node --watch` follows its dependencies in the main checkout's
+  `node_modules`: cloning them restarts the running viewer and kills every
+  live local terminal (issue #59). A plain `cp -R` does not, but `npm ci` is
+  the one that cannot drift from the lockfile.
 
 - **`<type>`** is one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 - **One worktree per branch**, named `../csv-<slug>` beside the main checkout.
