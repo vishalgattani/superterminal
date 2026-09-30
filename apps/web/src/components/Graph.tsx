@@ -129,6 +129,9 @@ function GraphInner() {
   const startRename = useStore((s) => s.startRename);
   const moveToView = useStore((s) => s.moveToView);
   const toggleOpenFn = useStore((s) => s.toggleOpen);
+  const reconnectAll = useStore((s) => s.reconnectAll);
+  // Reconnected so far while "Reconnect all" runs; null when idle.
+  const [reconnecting, setReconnecting] = useState<number | null>(null);
   const closePanel = useStore((s) => s.close);
   const { screenToFlowPosition, fitView, getNode, setCenter, getZoom } = useReactFlow();
   const orphans = useStore((s) => s.orphans);
@@ -510,6 +513,24 @@ function GraphInner() {
     {/* Save the current graph as a preset without leaving the canvas. */}
     <SaveGraph />
     <div style={toolbar}>
+      {(reconnectNodes.length > 1 || reconnecting !== null) && (
+        <button
+          style={pill}
+          disabled={reconnecting !== null}
+          title="Resume every gone Claude terminal in this view"
+          onClick={() => {
+            const keys = reconnectNodes.map((n) => n.data.key);
+            setReconnecting(0);
+            void reconnectAll(keys, setReconnecting).finally(() => setReconnecting(null));
+          }}
+        >
+          {reconnecting === null
+            ? `Reconnect all (${reconnectNodes.length})`
+            : // Each reconnected card leaves reconnectNodes, so the total is
+              // what is left plus what is done.
+              `Reconnecting ${reconnecting + 1}/${reconnectNodes.length + reconnecting}…`}
+        </button>
+      )}
       {selectedIds.size > 1 && (
         <button
           style={pill}

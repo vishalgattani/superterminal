@@ -261,4 +261,27 @@ await S().reconnectMember(A);
 check("link: reconnecting the missing end recreates the link against both current ids", linksPosted.some((l) => l.target === B), JSON.stringify(linksPosted));
 check("link: nothing is left pending once both ends are back", S().retained.links.length === 0);
 
+// ---- RECONNECT ALL (issue #65): every retained Claude member, one by one
+store = await fresh();
+const RA = U("7"), RB = U("8");
+S().addSession(info(RA, "local", "/tmp/ra"));
+S().addSession(info(RB, "local", "/tmp/rb"));
+S().setPosition(RA, { x: 101, y: 1 });
+S().setPosition(RB, { x: 202, y: 2 });
+S().applyStatus({ sessions: [
+  { sessionId: RA, cwd: "/tmp/ra", activity: "idle", claudeSessionId: "claude-ra" },
+  { sessionId: RB, cwd: "/tmp/rb", activity: "idle", claudeSessionId: "claude-rb" },
+] });
+const docAll = JSON.parse(JSON.stringify(S().serializeViews()));
+store = await fresh();
+S().hydrateViews(docAll);
+const spawnedBefore = spawned.length;
+const progress = [];
+await S().reconnectAll([RA, RB], (n) => progress.push(n));
+const mine = spawned.slice(spawnedBefore);
+check("reconnect all: one terminal per member, each resuming its own session", mine.map((m) => m.resume).join() === "claude-ra,claude-rb", JSON.stringify(mine.map((m) => m.resume)));
+check("reconnect all: progress is reported after each", progress.join() === "1,2");
+check("reconnect all: nothing is left waiting", Object.keys(S().retained.meta).length === 0 && Object.keys(S().retained.positions).length === 0, JSON.stringify(S().retained));
+check("reconnect all: each takes over its saved position", S().positions[mine[0].sessionId]?.x === 101 && S().positions[mine[1].sessionId]?.x === 202);
+
 report();
