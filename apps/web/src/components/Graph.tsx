@@ -122,6 +122,7 @@ function GraphInner() {
   const startRename = useStore((s) => s.startRename);
   const moveToView = useStore((s) => s.moveToView);
   const toggleOpenFn = useStore((s) => s.toggleOpen);
+  const closePanel = useStore((s) => s.close);
   const { screenToFlowPosition, fitView, getNode, setCenter, getZoom } = useReactFlow();
   const orphans = useStore((s) => s.orphans);
   const showForeign = useStore((s) => s.showForeign);
@@ -604,6 +605,10 @@ function GraphInner() {
         setMenu(null);
         setNodeMenu(null);
         setEdgeMenu(null);
+        // Empty canvas means "back to the graph": give it the room until a
+        // node is clicked again. A pan is a drag, not a click, so it keeps
+        // the pane open.
+        closePanel();
       }}
       onMoveStart={() => {
         setMenu(null);
