@@ -122,7 +122,7 @@ function GraphInner() {
   const startRename = useStore((s) => s.startRename);
   const moveToView = useStore((s) => s.moveToView);
   const toggleOpenFn = useStore((s) => s.toggleOpen);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, getNode, setCenter, getZoom } = useReactFlow();
   const orphans = useStore((s) => s.orphans);
   const showForeign = useStore((s) => s.showForeign);
   const setShowForeign = useStore((s) => s.setShowForeign);
@@ -337,6 +337,24 @@ function GraphInner() {
     }
     wasShowing.current = showFolders;
   }, [showFolders, fitView]);
+
+  // Opening a terminal (click, palette, Shift+Tab, a new session) pans the
+  // graph to its node, keeping the zoom. Deferred so a view switch from the
+  // palette has rendered the node before we look it up.
+  useEffect(() => {
+    if (!openSessionId) return;
+    const t = setTimeout(() => {
+      const n = getNode(openSessionId);
+      if (!n) return;
+      const w = n.measured?.width ?? 210;
+      const h = n.measured?.height ?? 80;
+      void setCenter(n.position.x + w / 2, n.position.y + h / 2, {
+        zoom: getZoom(),
+        duration: 250,
+      });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [openSessionId, activeTab, getNode, setCenter, getZoom]);
 
   // Where each session is actually drawn, so frames enclose what is on screen
   // (a subset view's default slots are not in any stored map).
