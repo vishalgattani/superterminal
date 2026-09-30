@@ -11,7 +11,7 @@ import { createLinkStore, type LinkStore } from "./links.ts";
 import { AgentPoller } from "./status/agents.ts";
 import { ContextScraper } from "./status/context.ts";
 import { ModelEffortScraper } from "./status/modelEffort.ts";
-import { OutputIndex } from "./status/outputIndex.ts";
+import { OutputIndex, stripAnsi } from "./status/outputIndex.ts";
 import { CostScraper } from "./status/cost.ts";
 import { CwdTracker } from "./status/cwd.ts";
 import { TranscriptIndex } from "./status/transcripts.ts";
@@ -117,9 +117,12 @@ export function createContext(): AppContext {
   // Read the dollar figure and the context percentage the statusline already
   // prints into the terminal. One tap, since PtyManager keeps only one.
   ptys.onOutput((sessionId, text) => {
-    costs.observe(sessionId, text);
-    contexts.observe(sessionId, text);
-    models.observe(sessionId, text);
+    // Colour codes land inside a statusline segment ("\x1b[2m$0.00 session"),
+    // and Claude Code's redraws can split one further, so read plain text.
+    const plain = stripAnsi(text);
+    costs.observe(sessionId, plain);
+    contexts.observe(sessionId, plain);
+    models.observe(sessionId, plain);
     output.observe(sessionId, text);
   });
 
