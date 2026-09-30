@@ -1,7 +1,7 @@
 // Monitors come from transcripts only; events must not read as ends (issue #44).
 import { check, repoRoot, report } from "./harness.mjs";
 
-const { parseMonitors } = await import(`${repoRoot}/apps/server/src/status/monitors.ts`);
+const { parseMonitors, isRunning } = await import(`${repoRoot}/apps/server/src/status/monitors.ts`);
 
 const t0 = "2026-09-29T06:19:19.000Z";
 const line = (o) => JSON.stringify({ sessionId: "sess-1", cwd: "/w", ...o });
@@ -37,5 +37,16 @@ rows = parseMonitors(
   ].join("\n"),
 );
 check("TaskStop ends it", rows[0]?.endedAt === Date.parse("2026-09-29T06:40:00.000Z"));
+
+// A monitor dies with the claude process that started it; the transcript
+// never says so (issue #58).
+const m = { taskId: "t", claudeSessionId: "sess-1", description: "d", startedAt: 1000, expiresAt: 100_000 };
+check("no agents poll yet: only the expiry decides", isRunning(m, 2000).running === true);
+check("a live run that started before it: still running", isRunning(m, 2000, new Map([["sess-1", 500]])).running === true);
+let st = isRunning(m, 2000, new Map([["sess-1", 1500]]));
+check("a newer run of the session: ended", st.running === false && st.endedAt === 1500, JSON.stringify(st));
+check("no live process for the session: ended", isRunning(m, 2000, new Map([["other", 0]])).running === false);
+check("a live row without startedAt keeps it running", isRunning(m, 2000, new Map([["sess-1", undefined]])).running === true);
+check("past its expiry: ended regardless", isRunning(m, 200_000, new Map([["sess-1", 500]])).running === false);
 
 report();

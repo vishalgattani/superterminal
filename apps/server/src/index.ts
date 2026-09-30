@@ -48,7 +48,7 @@ registerPresetsRoutes(app, ctx);
 registerTranscriptsRoutes(app, ctx);
 registerAgentsRoutes(app, ctx);
 registerViewsRoutes(app, ctx);
-registerMonitorRoutes(app);
+registerMonitorRoutes(app, ctx);
 
 
 // Serve the built UI when it exists. In development, Vite serves it instead
