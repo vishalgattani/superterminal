@@ -56,12 +56,19 @@ export const createStatusSlice: StateCreator<State, [], [], StatusSlice> = (set,
   applyStatus: ({ instance, sessions, totals, hosts: hostTallies, links, orphans, subagents }) =>
     set((st) => {
       const activity: Record<string, SessionActivity> = {};
+      const now = Date.now();
       // Only replaced when a folder actually changed, so a poll that finds
       // nothing new leaves `sessions` untouched and re-renders nothing.
       let moved = st.sessions;
       for (const s of sessions) {
         const { sessionId, cwd, ...rest } = s;
-        activity[sessionId] = rest;
+        const prev = st.activity[sessionId];
+        const { updatedAt, ...prevRest } = prev ?? {};
+        activity[sessionId] = {
+          ...rest,
+          updatedAt:
+            prev && updatedAt && JSON.stringify(prevRest) === JSON.stringify(rest) ? updatedAt : now,
+        };
         // The server's view of where this terminal is working now. The folder
         // tree and the label are derived from it, so a `cd` re-files the node.
         const known = moved[sessionId];

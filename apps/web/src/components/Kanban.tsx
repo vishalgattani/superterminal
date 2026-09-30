@@ -1,8 +1,10 @@
-import type { Activity, Orphan } from "../store.ts";
+import { useState } from "react";
+import type { Activity, Orphan, SessionActivity } from "../store.ts";
 import { externalOrphans, useStore } from "../store.ts";
 import { ForeignActions, short } from "./ForeignActions.tsx";
 import { hostStyle as hostColour } from "../lib/hostColour.ts";
 import { isRemoteHost } from "@cv/shared";
+import { modelLabel } from "../lib/model.ts";
 
 /**
  * Sessions grouped by what they are doing.
@@ -21,6 +23,18 @@ const COLUMNS: { key: Activity | "shell"; title: string; hint: string; accent: s
   { key: "shell", title: "Shell", hint: "no Claude running", accent: "#6a6a73" },
 ];
 
+type SortKey = "default" | "recent" | "cost";
+const SORT_KEY = "cv-kanban-sort";
+
+function readSort(): SortKey {
+  try {
+    const v = localStorage.getItem(SORT_KEY);
+    return v === "recent" || v === "cost" ? v : "default";
+  } catch {
+    return "default";
+  }
+}
+
 export function Kanban() {
   const sessions = useStore((s) => s.sessions);
   const order = useStore((s) => s.order);
@@ -38,6 +52,36 @@ export function Kanban() {
   const externalBucket = (o: Orphan): Activity =>
     o.activity === "waiting" || o.activity === "working" ? o.activity : "idle";
 
+  const [sort, setSortState] = useState<SortKey>(readSort);
+  const setSort = (v: SortKey) => {
+    setSortState(v);
+    try {
+      localStorage.setItem(SORT_KEY, v);
+    } catch {
+      // Not remembered; the default order is fine.
+    }
+  };
+  const [modelFilter, setModelFilter] = useState("");
+  const [effortFilter, setEffortFilter] = useState("");
+
+  // Same gate as the graph node's pills: only while a Claude is running.
+  const modelOf = (id: string) =>
+    modelLabel(activity[id]?.liveModel ?? sessions[id]?.model, activity[id]?.claudeSessionId);
+  const effortOf = (id: string) =>
+    activity[id]?.claudeSessionId !== undefined ? activity[id]?.effort : undefined;
+  const models = [...new Set(order.map(modelOf).filter(Boolean))].sort() as string[];
+  const efforts = [...new Set(order.map(effortOf).filter(Boolean))].sort() as string[];
+  const filtering = Boolean(modelFilter || effortFilter);
+  const passes = (id: string) =>
+    (!modelFilter || modelOf(id) === modelFilter) &&
+    (!effortFilter || effortOf(id) === effortFilter);
+  const sorted = (ids: string[]) => {
+    if (sort === "default") return ids;
+    const key = (a: SessionActivity | undefined) =>
+      (sort === "cost" ? a?.costUsd : a?.updatedAt) ?? -1;
+    return [...ids].sort((a, b) => key(activity[b]) - key(activity[a]));
+  };
+
   const bucket = (id: string): Activity | "shell" => {
     if (exited[id]) return "shell";
     return activity[id]?.activity ?? "unknown";
@@ -48,15 +92,51 @@ export function Kanban() {
   );
 
   return (
+    <div style={wrap}>
+      <div style={toolbar}>
+        <label style={toolLabel}>
+          Sort
+          <select style={select} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            <option value="default">default</option>
+            <option value="recent">recently updated</option>
+            <option value="cost">cost</option>
+          </select>
+        </label>
+        <label style={toolLabel}>
+          Model
+          <select style={select} value={modelFilter} onChange={(e) => setModelFilter(e.target.value)}>
+            <option value="">all</option>
+            {models.map((m) => (
+              <option key={m}>{m}</option>
+            ))}
+          </select>
+        </label>
+        <label style={toolLabel}>
+          Effort
+          <select style={select} value={effortFilter} onChange={(e) => setEffortFilter(e.target.value)}>
+            <option value="">all</option>
+            {efforts.map((m) => (
+              <option key={m}>{m}</option>
+            ))}
+          </select>
+        </label>
+        {sort === "recent" && (
+          <span style={{ color: "#5c5c65", fontSize: 10.5 }}>since this page loaded</span>
+        )}
+      </div>
     <div style={board}>
       {columns.map((col) => {
-        const foreign = external.filter((o) => externalBucket(o) === col.key);
-        const ids = order.filter(
-          (id) =>
-            bucket(id) === col.key ||
-            // "unknown" means we have not heard yet; park it with idle rather
-            // than inventing a column for a transient state.
-            (col.key === "idle" && bucket(id) === "unknown"),
+        // External sessions report no model or effort, so a filter hides them.
+        const foreign = filtering ? [] : external.filter((o) => externalBucket(o) === col.key);
+        const ids = sorted(
+          order.filter(
+            (id) =>
+              passes(id) &&
+              (bucket(id) === col.key ||
+                // "unknown" means we have not heard yet; park it with idle rather
+                // than inventing a column for a transient state.
+                (col.key === "idle" && bucket(id) === "unknown")),
+          ),
         );
         return (
           <section key={col.key} style={column}>
@@ -133,6 +213,29 @@ export function Kanban() {
                     </div>
                     {/* Claude's own title, when it differs from the alias.
                         Useful because Claude names a session after the work. */}
+                    {act?.claudeSessionId && (
+                      <div style={cardMeta}>
+                        <span style={idTag} title={`Claude session ${act.claudeSessionId}`}>
+                          ◆ {act.claudeSessionId.slice(0, 8)}
+                        </span>
+                        {modelOf(id) && (
+                          <span style={modelPill} title={`Model: ${act.liveModel ?? info.model}`}>
+                            {modelOf(id)}
+                          </span>
+                        )}
+                        {act.effort && <span style={modelPill}>{act.effort}</span>}
+                        {act.contextPct !== undefined && (
+                          <span style={modelPill} title="Context used">
+                            C{act.contextPct}%
+                          </span>
+                        )}
+                        {act.costUsd !== undefined && (
+                          <span style={costPill} title="Session cost, from the statusline">
+                            ${act.costUsd.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {act?.claudeName && act.claudeName !== info.alias && (
                       <div style={claudeName} title={act.claudeName}>
                         {act.claudeName}
@@ -170,14 +273,72 @@ export function Kanban() {
         );
       })}
     </div>
+    </div>
   );
 }
+
+const wrap: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  height: "100%",
+  background: "#0e0e11",
+};
+
+const toolbar: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  padding: "10px 12px 0",
+};
+
+const toolLabel: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 11,
+  color: "#8a8a93",
+};
+
+const select: React.CSSProperties = {
+  background: "#15151a",
+  color: "#e6e6e6",
+  border: "1px solid #2a2a32",
+  borderRadius: 5,
+  fontSize: 11,
+  padding: "2px 4px",
+};
+
+const pill: React.CSSProperties = {
+  fontSize: 10,
+  padding: "1px 6px",
+  borderRadius: 999,
+  whiteSpace: "nowrap",
+};
+const modelPill: React.CSSProperties = {
+  ...pill,
+  background: "#1b2030",
+  color: "#9fb0d8",
+  border: "1px solid #2f3752",
+};
+const costPill: React.CSSProperties = {
+  ...pill,
+  background: "#1a2a1e",
+  color: "#8fd0a0",
+  border: "1px solid #2c4a35",
+  fontVariantNumeric: "tabular-nums",
+};
+const idTag: React.CSSProperties = {
+  fontSize: 10,
+  color: "#8fc0f0",
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+};
 
 const board: React.CSSProperties = {
   display: "flex",
   gap: 12,
   padding: 12,
-  height: "100%",
+  flex: 1,
+  minHeight: 0,
   boxSizing: "border-box",
   overflowX: "auto",
   background: "#0e0e11",

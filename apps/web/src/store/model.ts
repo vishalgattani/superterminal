@@ -27,6 +27,11 @@ export interface SessionActivity {
   effort?: string;
   /** Claude's own session id, the one `--resume` takes. */
   claudeSessionId?: string;
+  /**
+   * When this viewer last saw any of the above change, for "most recently
+   * updated" sorting. Client-side, so it starts over on a page load.
+   */
+  updatedAt?: number;
 }
 
 export interface InstanceStatus {
