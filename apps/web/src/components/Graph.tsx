@@ -26,7 +26,7 @@ import { SaveGraph } from "./SaveGraph.tsx";
 import { SessionNode, type SessionNodeData } from "./SessionNode.tsx";
 import { buildFolderTree } from "../lib/folders.ts";
 import { externalOrphans, foreignId, useStore, viewSessionIds, OVERVIEW_TAB } from "../store.ts";
-import { NOTE_PREFIX } from "../store/model.ts";
+import { NOTE_PREFIX, type MonitorInfo } from "../store/model.ts";
 import { hostPalette } from "../lib/hostColour.ts";
 import { isRemoteHost } from "@cv/shared";
 import { canvasEnd } from "../lib/edgeEnds.ts";
@@ -93,6 +93,13 @@ function GraphInner() {
   const openSessionId = useStore((s) => s.openSessionId);
   const exited = useStore((s) => s.exited);
   const subagentCounts = useStore((s) => s.subagents?.counts ?? EMPTY_COUNTS);
+  const subagentActive = useStore((s) => s.subagents?.active ?? EMPTY_COUNTS);
+  const monitors = useStore((s) => s.monitors);
+  const runningMonitors = useMemo(() => {
+    const by: Record<string, MonitorInfo[]> = {};
+    for (const m of monitors) if (m.running) (by[m.claudeSessionId] ??= []).push(m);
+    return by;
+  }, [monitors]);
   const subagentsFetchedAt = useStore((s) => s.subagents?.fetchedAt ?? 0);
   const activity = useStore((s) => s.activity);
   const setPosition = useStore((s) => s.setPosition);
@@ -154,6 +161,7 @@ function GraphInner() {
           // no terminal here, so the transcript scan is the only thing that
           // knows about it.
           subagents: subagentCounts[o.sessionId],
+          subagentsActive: subagentActive[o.sessionId],
           subagentsScannedAt: subagentsFetchedAt,
         },
       };
@@ -231,6 +239,8 @@ function GraphInner() {
               // Keyed by Claude's session id, not the terminal's: subagents
               // belong to the Claude, and a re-adopted terminal has a new id.
               subagents: subagentCounts[activity[id]?.claudeSessionId ?? ""],
+              subagentsActive: subagentActive[activity[id]?.claudeSessionId ?? ""],
+              monitors: runningMonitors[activity[id]?.claudeSessionId ?? ""],
               subagentsScannedAt: subagentsFetchedAt,
             },
           };
@@ -248,6 +258,8 @@ function GraphInner() {
       exited,
       activity,
       selectedIds,
+      runningMonitors,
+      subagentActive,
     ],
   );
 

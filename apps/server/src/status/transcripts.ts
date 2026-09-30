@@ -67,6 +67,8 @@ export interface TranscriptSummary {
   bytes: number;
   recentUserTurns: number;
   subagents: number;
+  /** Subagents whose transcript was written in the last two minutes. */
+  subagentsActive?: number;
   host: HostId;
 }
 
@@ -105,14 +107,20 @@ export class TranscriptIndex {
    * a count with no age attached would read as live when it is up to a minute
    * old, and "0 subagents" is exactly the wrong thing to assert confidently.
    */
-  subagentCounts(host: HostId): { counts: Record<string, number>; fetchedAt: number } | undefined {
+  subagentCounts(
+    host: HostId,
+  ): { counts: Record<string, number>; active: Record<string, number>; fetchedAt: number } | undefined {
     const hit = this.cache.get(host);
     if (!hit) return undefined;
     const counts: Record<string, number> = {};
+    const active: Record<string, number> = {};
     for (const r of hit.rows) {
-      if (r.sessionId && r.subagents > 0) counts[r.sessionId] = r.subagents;
+      if (r.sessionId && r.subagents > 0) {
+        counts[r.sessionId] = r.subagents;
+        active[r.sessionId] = r.subagentsActive ?? 0;
+      }
     }
-    return { counts, fetchedAt: hit.fetchedAt };
+    return { counts, active, fetchedAt: hit.fetchedAt };
   }
 
   /**

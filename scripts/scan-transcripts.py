@@ -19,6 +19,7 @@ the useful metadata (cwd, branch, opening prompt) is at the top.
 import json
 import os
 import sys
+import time
 
 HOME = os.path.expanduser("~")
 ROOT = os.path.join(HOME, ".claude", "projects")
@@ -105,10 +106,19 @@ def summarise(path, session_id, slug):
             turns += 1
 
     subagents = 0
+    # Written to in the last two minutes: still running. A finished subagent's
+    # transcript stays, so the plain count is a lifetime total, not "busy now".
+    subagents_active = 0
     sub_dir = os.path.join(os.path.dirname(path), session_id, "subagents")
     if os.path.isdir(sub_dir):
         try:
-            subagents = len([f for f in os.listdir(sub_dir) if f.endswith(".jsonl")])
+            now = time.time()
+            for f in os.listdir(sub_dir):
+                if not f.endswith(".jsonl"):
+                    continue
+                subagents += 1
+                if now - os.path.getmtime(os.path.join(sub_dir, f)) < 120:
+                    subagents_active += 1
         except OSError:
             pass
 
@@ -127,6 +137,7 @@ def summarise(path, session_id, slug):
         # Only the tail was read, so this is a floor, not an exact count.
         "recentUserTurns": turns,
         "subagents": subagents,
+        "subagentsActive": subagents_active,
     }
 
 

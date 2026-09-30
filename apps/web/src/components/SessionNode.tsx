@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { HostId } from "@cv/shared";
-import { useStore } from "../store.ts";
+import { useStore, type MonitorInfo } from "../store.ts";
 import { TreeHandles } from "./TreeHandles.tsx";
 import { hostPalette } from "../lib/hostColour.ts";
 import { modelLabel } from "../lib/model.ts";
@@ -34,6 +34,10 @@ export interface SessionNodeData extends Record<string, unknown> {
   subagents?: number;
   /** When that scan ran, so the count can say how much to trust it. */
   subagentsScannedAt?: number;
+  /** Of `subagents`, how many are running now; absent from an older server. */
+  subagentsActive?: number;
+  /** Monitors this node's Claude is running now. */
+  monitors?: MonitorInfo[];
   claudeName?: string;
   /** Claude's own session id, present only when a Claude is running here. */
   claudeSessionId?: string;
@@ -295,7 +299,8 @@ export function SessionNode({ id, data, selected }: NodeProps) {
               {d.effort}
             </span>
           )}
-          <SubagentBadge n={d.subagents} scannedAt={d.subagentsScannedAt} />
+          <SubagentBadge n={d.subagents} active={d.subagentsActive} scannedAt={d.subagentsScannedAt} />
+          <MonitorBadge monitors={d.monitors} />
           {/* Only shown once a statusline has actually reported a figure, so
               a missing cost reads as "unknown" rather than as zero. */}
           {d.costUsd !== undefined && (
@@ -579,15 +584,27 @@ const modelPill: React.CSSProperties = {
  * already running, so a confident zero would be a lie. The age is in the
  * tooltip always, and on the face once the count is old enough to doubt.
  */
-export function SubagentBadge({ n, scannedAt }: { n?: number; scannedAt?: number }) {
+export function SubagentBadge({
+  n,
+  active,
+  scannedAt,
+}: {
+  n?: number;
+  active?: number;
+  scannedAt?: number;
+}) {
   if (!n) return null;
   const stale = isStale(scannedAt ?? 0);
+  // n is every subagent the session ever started; finished ones keep their
+  // transcripts. Only `active` means work happening now.
+  const running = active ?? 0;
+  const known = active !== undefined;
   return (
     <span
-      style={subagentPill}
-      title={`${subagentLabel(n)} — from a transcript scan ${scanAge(scannedAt ?? 0)}`}
+      style={known && running === 0 ? { ...subagentPill, opacity: 0.5 } : subagentPill}
+      title={`${subagentLabel(n)}${known ? `, ${running} running now` : ""} — from a transcript scan ${scanAge(scannedAt ?? 0)}`}
     >
-      ⑂ {n}
+      ⑂ {known ? (running > 0 ? `${running} running` : `${n} done`) : n}
       {stale && <span style={{ opacity: 0.55 }}> · {scanAge(scannedAt ?? 0)}</span>}
     </span>
   );
@@ -600,4 +617,39 @@ const subagentPill: React.CSSProperties = {
   background: "#1e2a20",
   color: "#8fc79a",
   border: "1px solid #2f4536",
+};
+
+/** "12m left", "1h 5m left"; "no expiry" for a watch with none. */
+export function timeLeft(expiresAt: number | undefined, now = Date.now()): string {
+  if (expiresAt === undefined) return "no expiry";
+  const min = Math.max(0, Math.round((expiresAt - now) / 60_000));
+  return min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m left` : `${min}m left`;
+}
+
+/** Running Monitors, counted on the face and listed in the tooltip. */
+export function MonitorBadge({ monitors }: { monitors?: MonitorInfo[] }) {
+  if (!monitors?.length) return null;
+  const title = monitors
+    .map(
+      (m) =>
+        `${m.taskId} · ${timeLeft(m.expiresAt)}\n  ${m.description}` +
+        (m.lastEvent ? `\n  last: ${m.lastEvent}` : ""),
+    )
+    .join("\n");
+  return (
+    <span style={monitorPill} title={`Monitors running:\n${title}`}>
+      ⏱ {monitors.length}
+    </span>
+  );
+}
+
+const monitorPill: React.CSSProperties = {
+  flexShrink: 0,
+  whiteSpace: "nowrap",
+  fontSize: 10,
+  padding: "1px 6px",
+  borderRadius: 999,
+  background: "#2a2418",
+  color: "#e0c080",
+  border: "1px solid #4a3f28",
 };

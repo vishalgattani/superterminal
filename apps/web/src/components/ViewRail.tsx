@@ -7,6 +7,7 @@ import { useStore, type ViewMode } from "../store.ts";
 const VIEWS: { key: ViewMode; glyph: string; label: string }[] = [
   { key: "graph", glyph: "◉", label: "Graph" },
   { key: "kanban", glyph: "▦", label: "Kanban" },
+  { key: "monitors", glyph: "⏱", label: "Monitors" },
   { key: "agents", glyph: "◆", label: "Agents" },
   { key: "history", glyph: "◷", label: "History" },
 ];

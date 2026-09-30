@@ -116,14 +116,16 @@ export function registerStatusRoutes(app: FastifyInstance, ctx: AppContext): voi
       // host a transcript came from to look one up.
       subagents: (() => {
         const counts: Record<string, number> = {};
+        const active: Record<string, number> = {};
         let fetchedAt = 0;
         for (const h of hosts.keys()) {
           const got = transcripts.subagentCounts(h);
           if (!got) continue;
           Object.assign(counts, got.counts);
+          Object.assign(active, got.active);
           fetchedAt = Math.max(fetchedAt, got.fetchedAt);
         }
-        return { counts, fetchedAt };
+        return { counts, active, fetchedAt };
       })(),
       orphans,
       // The full terminal list, so the UI can mirror the server continuously.

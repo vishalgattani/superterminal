@@ -10,6 +10,7 @@ import { HostSettings } from "./components/HostSettings.tsx";
 import { InstanceLight } from "./components/InstanceLight.tsx";
 import { History } from "./components/History.tsx";
 import { Kanban } from "./components/Kanban.tsx";
+import { Monitors } from "./components/Monitors.tsx";
 import { Presets } from "./components/Presets.tsx";
 import { StatsBar } from "./components/StatsBar.tsx";
 import { ViewRail } from "./components/ViewRail.tsx";
@@ -87,6 +88,29 @@ export default function App() {
         /* the empty graph is a fine fallback */
       });
   }, [api, token, setHosts, adoptSessions]);
+
+  // Monitors come from a transcript scan, which is heavier than /api/status
+  // and changes on the scale of minutes, so a slower poll of its own. A 404
+  // (a server without the route yet) just leaves the list empty.
+  const setMonitors = useStore((s) => s.setMonitors);
+  useEffect(() => {
+    if (!token) return;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const body = await api("/api/monitors");
+        if (!stop) setMonitors(body.monitors ?? []);
+      } catch {
+        // Keep the last list; the next tick tries again.
+      }
+    };
+    void tick();
+    const t = setInterval(tick, 10_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [token, api, setMonitors]);
 
   // Poll live status: instance light plus per-session activity. 3s is a
   // compromise between noticing a session that needs input and not hammering
@@ -348,6 +372,8 @@ export default function App() {
             </div>
           ) : view === "kanban" ? (
             <Kanban />
+          ) : view === "monitors" ? (
+            <Monitors />
           ) : view === "agents" ? (
             <Agents />
           ) : (

@@ -16,6 +16,7 @@ import { registerSessionsRoutes } from "./routes/sessions.ts";
 import { registerStatusRoutes } from "./routes/status.ts";
 import { registerTranscriptsRoutes } from "./routes/transcripts.ts";
 import { registerViewsRoutes } from "./routes/views.ts";
+import { registerMonitorRoutes } from "./status/monitors.ts";
 import { attachTerminalSocket } from "./ws/term.ts";
 
 const ctx = createContext();
@@ -47,6 +48,7 @@ registerPresetsRoutes(app, ctx);
 registerTranscriptsRoutes(app, ctx);
 registerAgentsRoutes(app, ctx);
 registerViewsRoutes(app, ctx);
+registerMonitorRoutes(app);
 
 
 // Serve the built UI when it exists. In development, Vite serves it instead

@@ -11,6 +11,7 @@ export interface ForeignNodeData extends Record<string, unknown> {
   subagents?: number;
   /** When that scan ran, so the count can say how much to trust it. */
   subagentsScannedAt?: number;
+  subagentsActive?: number;
 }
 
 /**
@@ -77,7 +78,7 @@ export function ForeignNode({ data, positionAbsoluteX, positionAbsoluteY }: Node
         <span style={{ color: tone }}>
           {o.waitingFor ? `waiting: ${o.waitingFor}` : o.activity}
         </span>
-        <SubagentBadge n={d.subagents} scannedAt={d.subagentsScannedAt} />
+        <SubagentBadge n={d.subagents} active={d.subagentsActive} scannedAt={d.subagentsScannedAt} />
         <span style={{ marginLeft: "auto", color: "#5c5c65" }}>external</span>
       </div>
       <ForeignActions o={o} at={{ x: positionAbsoluteX, y: positionAbsoluteY }} />
