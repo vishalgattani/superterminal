@@ -320,6 +320,11 @@ export interface TabsSlice {
    * session into wherever the old key was kept aside.
    */
   reconnectMember: (key: string) => Promise<void>;
+  /**
+   * Reconnect several retained members, one after another: each resolves its
+   * key into the views before the next spawns. `onProgress` gets the count done.
+   */
+  reconnectAll: (keys: string[], onProgress?: (done: number) => void) => Promise<void>;
   /** A new view is an empty subset: the owner picks which sessions it shows. */
   addTab: (name?: string) => void;
   /** Show more sessions on the active view. No effect on the overview. */

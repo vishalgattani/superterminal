@@ -114,6 +114,14 @@ export const createTabsSlice: StateCreator<State, [], [], TabsSlice> = (set, get
     }
   },
 
+  reconnectAll: async (keys, onProgress) => {
+    let done = 0;
+    for (const key of keys) {
+      await get().reconnectMember(key);
+      onProgress?.(++done);
+    }
+  },
+
   addTab: (name) =>
     set((s) => {
       const id = uid("t");
