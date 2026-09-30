@@ -62,6 +62,8 @@ const server = spawn(process.execPath, [join(repoRoot, "apps/server/src/index.ts
     CV_CONFIG: join(rig, "config.env"),
     CV_STATE_DIR: join(rig, "state"),
     FAKE_TMUX_DIR: join(rig, "tmux"),
+    // Keys the keygen test generates land in the rig, never in the owner's ~/.ssh.
+    CV_SSH_DIR: join(rig, "ssh"),
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
