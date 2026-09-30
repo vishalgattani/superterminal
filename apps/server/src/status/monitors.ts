@@ -2,6 +2,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
+import { LOCAL_HOST_ID } from "@cv/shared";
+import type { AppContext } from "../context.ts";
 
 /**
  * The Monitor watches Claude sessions on this machine have set up, read from
@@ -13,7 +15,8 @@ import type { FastifyInstance } from "fastify";
  * per event it saw, and a last one carrying a <status> when it ends — or a
  * TaskStop naming it. "Running" is therefore inferred: started,
  * no end seen, and not past its stated expiry. A session killed outright leaves
- * no end record, which is what the expiry bounds.
+ * no end record, which is what the expiry bounds — and, once `claude agents`
+ * has been polled, what the session's current run bounds (see `isRunning`).
  */
 export interface MonitorInfo {
   taskId: string;
@@ -122,10 +125,35 @@ export function parseMonitors(jsonl: string): Omit<MonitorInfo, "running">[] {
   return [...byTask.values()];
 }
 
+/**
+ * Whether a monitor is still watching.
+ *
+ * A monitor lives inside the claude process that started it. `runs` maps each
+ * live local session to when its current process started, from `claude
+ * agents`; when it is known, a monitor from an earlier run of its session (a
+ * restart, a resume) or of a session with no live process is over, although
+ * its transcript never says so. Without `runs`, only the expiry bounds it.
+ */
+export function isRunning(
+  m: Omit<MonitorInfo, "running">,
+  now: number,
+  runs?: Map<string, number | undefined>,
+): { running: boolean; endedAt?: number } {
+  if (m.endedAt !== undefined || (m.expiresAt !== undefined && m.expiresAt <= now)) {
+    return { running: false, endedAt: m.endedAt };
+  }
+  if (runs) {
+    if (!runs.has(m.claudeSessionId)) return { running: false };
+    const runStart = runs.get(m.claudeSessionId);
+    if (runStart !== undefined && runStart > m.startedAt) return { running: false, endedAt: runStart };
+  }
+  return { running: true };
+}
+
 export class MonitorScanner {
   private cache = new Map<string, { mtimeMs: number; size: number; rows: Omit<MonitorInfo, "running">[] }>();
 
-  list(now = Date.now()): MonitorInfo[] {
+  list(now = Date.now(), runs?: Map<string, number | undefined>): MonitorInfo[] {
     const out: MonitorInfo[] = [];
     let files: string[];
     try {
@@ -158,7 +186,8 @@ export class MonitorScanner {
         this.cache.set(path, hit);
       }
       for (const r of hit.rows) {
-        out.push({ ...r, running: r.endedAt === undefined && (r.expiresAt === undefined || r.expiresAt > now) });
+        const state = isRunning(r, now, runs);
+        out.push({ ...r, ...state, endedAt: state.endedAt ?? r.endedAt });
       }
     }
     for (const k of this.cache.keys()) if (!seen.has(k)) this.cache.delete(k);
@@ -166,7 +195,16 @@ export class MonitorScanner {
   }
 }
 
-export function registerMonitorRoutes(app: FastifyInstance): void {
+export function registerMonitorRoutes(app: FastifyInstance, ctx: AppContext): void {
   const scanner = new MonitorScanner();
-  app.get("/api/monitors", async () => ({ monitors: scanner.list() }));
+  app.get("/api/monitors", async () => {
+    // Transcripts are local, so only local Claude processes can vouch for them.
+    // Undefined until the first good poll, so a fresh server, or a failed
+    // poll's empty list, does not end them all.
+    const local = ctx.agents.get(LOCAL_HOST_ID);
+    const runs = local && !local.error
+      ? new Map(local.rows.filter((r) => r.sessionId).map((r) => [r.sessionId!, r.startedAt]))
+      : undefined;
+    return { monitors: scanner.list(Date.now(), runs) };
+  });
 }
