@@ -16,6 +16,7 @@ import { StatsBar } from "./components/StatsBar.tsx";
 import { ViewRail } from "./components/ViewRail.tsx";
 import { TerminalPane } from "./components/TerminalPane.tsx";
 import type { Metrics } from "./lib/termSocket.ts";
+import { viewsNeedSave } from "./lib/persist.ts";
 import { externalOrphans, useStore, type HostStatus } from "./store.ts";
 
 const debug = new URLSearchParams(location.search).has("debug");
@@ -182,15 +183,7 @@ export default function App() {
     };
     const unsubscribe = useStore.subscribe((s, prev) => {
       if (!s.viewsHydrated) return;
-      if (
-        s.viewsHydrated !== prev.viewsHydrated ||
-        s.tabs !== prev.tabs ||
-        s.activeTab !== prev.activeTab ||
-        s.positions !== prev.positions ||
-        s.showFolders !== prev.showFolders ||
-        s.showForeign !== prev.showForeign ||
-        s.treeFlow !== prev.treeFlow
-      ) {
+      if (s.viewsHydrated !== prev.viewsHydrated || viewsNeedSave(s, prev)) {
         clearTimeout(timer);
         timer = setTimeout(() => flush(), 800);
       }

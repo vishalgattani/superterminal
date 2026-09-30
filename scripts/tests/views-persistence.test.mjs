@@ -261,4 +261,29 @@ await S().reconnectMember(A);
 check("link: reconnecting the missing end recreates the link against both current ids", linksPosted.some((l) => l.target === B), JSON.stringify(linksPosted));
 check("link: nothing is left pending once both ends are back", S().retained.links.length === 0);
 
+// ---- A RECONNECTED TERMINAL SURVIVES A SECOND RESTART (issue #60)
+// Reconnect spawns a new terminal, which is saved before the status poll has
+// matched it to its Claude. The Claude id arriving afterwards must trigger a
+// save, or the next restart finds a dead terminal with no Claude to resume.
+const { viewsNeedSave } = await import(pathToFileURL(src("lib/persist.ts")).href);
+store = await fresh();
+const R = U("9");
+S().addSession(info(R, "local", "/tmp/resumed"));
+S().hydrateViews(null);
+const savedEarly = JSON.parse(JSON.stringify(S().serializeViews()));
+check("a new terminal saved before its Claude is known has no claude id", !savedEarly.meta?.[R]?.claudeSessionId);
+let before = S();
+S().applyStatus({ sessions: [{ sessionId: R, cwd: "/tmp/resumed", activity: "working", claudeSessionId: "claude-r" }] });
+check("its Claude id arriving is a change worth saving", viewsNeedSave(S(), before) === true);
+before = S();
+S().applyStatus({ sessions: [{ sessionId: R, cwd: "/tmp/resumed", activity: "idle", claudeSessionId: "claude-r" }] });
+check("...but activity alone (working -> idle) is not", viewsNeedSave(S(), before) === false);
+const savedLate = JSON.parse(JSON.stringify(S().serializeViews()));
+store = await fresh(); // the second restart: the terminal is gone
+S().hydrateViews(savedLate);
+check("after the second restart it is offered for reconnect", S().retained.meta[R]?.claudeSessionId === "claude-r", JSON.stringify(S().retained.meta));
+store = await fresh();
+S().hydrateViews(savedEarly);
+check("(the early save alone would have lost it — the bug)", S().retained.meta[R] === undefined);
+
 report();

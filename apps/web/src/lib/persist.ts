@@ -194,6 +194,42 @@ export function serializeViews(input: {
   };
 }
 
+/** The parts of the store that `serializeViews` writes from. */
+type Saveable = Pick<
+  Parameters<typeof serializeViews>[0],
+  "tabs" | "activeTab" | "positions" | "showFolders" | "showForeign" | "treeFlow" | "sessions" | "activity"
+>;
+
+/** Each terminal's alias and Claude session id: what `meta` is saved from. */
+const metaSignature = (s: Saveable): string =>
+  Object.keys(s.sessions)
+    .sort()
+    .map((id) => `${id}:${s.sessions[id]!.alias ?? ""}:${s.activity[id]?.claudeSessionId ?? ""}`)
+    .join("|");
+
+/**
+ * Whether a store change is worth writing to the saved views.
+ *
+ * Includes a terminal's Claude session id or alias arriving or changing, not
+ * just layout. A reconnected (or new) terminal is saved before the status poll
+ * has matched it to its Claude, so without this its id was never written: the
+ * next restart found a dead terminal with no Claude to resume, dropped it as a
+ * plain shell, and saved the empty result (issue #60). Activity alone
+ * (working, idle, cost) is not saved, so it does not count.
+ */
+export function viewsNeedSave(s: Saveable, prev: Saveable): boolean {
+  return (
+    s.tabs !== prev.tabs ||
+    s.activeTab !== prev.activeTab ||
+    s.positions !== prev.positions ||
+    s.showFolders !== prev.showFolders ||
+    s.showForeign !== prev.showForeign ||
+    s.treeFlow !== prev.treeFlow ||
+    ((s.sessions !== prev.sessions || s.activity !== prev.activity) &&
+      metaSignature(s) !== metaSignature(prev))
+  );
+}
+
 export interface Hydrated {
   tabs: GraphTab[];
   activeTab: string;
